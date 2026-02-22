@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling >= 1.28"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mt2-agent"
+version = "0.1.0"
+description = "Metin2 auto-playing agent"
+authors = [
+  { name="Marek Jagos", email="jagos.marek@outlook.cz" },
+]
+license = "LicenseRef-Proprietary"
+requires-python = ">=3.13"
+dependencies = [
+    "interception-python >= 1.13.6"
+]
+readme = "README.md"
+
+[project.scripts]
+mt2-agent = "mt2_agent:main"
