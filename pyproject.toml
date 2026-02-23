@@ -12,9 +12,11 @@ authors = [
 license = "LicenseRef-Proprietary"
 requires-python = ">=3.13"
 dependencies = [
-    "interception-python >= 1.13.6"
+    "interception-python >= 1.13.6",
+    "bettercam >= 1.0.0",
+    "opencv-python >= 4.13"
 ]
 readme = "README.md"
 
 [project.scripts]
-mt2-agent = "mt2_agent:main"
+mt2-agent = "mt2_agent.main:main"
