@@ -7,9 +7,8 @@ ESCAPE = "esc"
 OPEN_BIOLOG_KEY = "f7"
 
 class NothyrActions:
-    def __init__(self, to_screen: callable, get_dimensions: callable):
-        w, h = get_dimensions()
-        self.ui = NothyrUI(w, h)
+    def __init__(self, to_screen: callable, dimensions: tuple[int, int]):
+        self.ui = NothyrUI(*dimensions)
         self.to_screen = to_screen
 
     def open_biolog(self):

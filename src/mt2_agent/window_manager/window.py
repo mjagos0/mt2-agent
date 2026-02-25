@@ -55,14 +55,18 @@ class Window:
         )
 
     def windowPoint(self, x: int, y: int) -> tuple[int, int]:
-        pt = wt.POINT(x, y)
+        scale = self.getScaleFactor()
+        pt = wt.POINT(round(x * scale), round(y * scale))
         ctypes.windll.user32.ClientToScreen(self.window, ctypes.byref(pt))
-
+        
         return (pt.x, pt.y)
     
     def getDimensions(self) -> tuple[int, int]:
         rect = self.getRect()
         return rect.right - rect.left, rect.bottom - rect.top
+    
+    def getScaleFactor(self) -> float:
+        return ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
     
     def getRect(self) -> wt.RECT:
         rect = wt.RECT()

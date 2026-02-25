@@ -37,9 +37,11 @@ def main():
 
 def agent_loop(args: argparse.Namespace):
     window = wm.Window(nthr.WINDOW_CLASS_NAME, nthr.WINDOW_NAME)
-    actions = nthr.NothyrActions(window.windowPoint, window.getDimensions)
-
+    scale = window.getScaleFactor()
+    w, h = window.getDimensions()
+    actions = nthr.NothyrActions(window.windowPoint, (round(w / scale), round(h / scale)))
     actions.open_biolog()
+    return
     
 
     active = True
