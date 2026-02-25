@@ -2,8 +2,9 @@ from .screenshot import Screenshot
 
 import ctypes
 import ctypes.wintypes as wt
-
 import logging
+import time
+
 import bettercam
 
 logger = logging.getLogger(__name__)
@@ -28,27 +29,36 @@ class Window:
         return hwnd
     
     def capture(self) -> Screenshot:
-        origin = self.getPoint(0, 0)
+        x, y = self.windowPoint(0, 0)
         width, height = self.getDimensions()
 
-        region = (origin.x, origin.y, origin.x + width, origin.y + height)
+        screen_w = ctypes.windll.user32.GetSystemMetrics(0)
+        screen_h = ctypes.windll.user32.GetSystemMetrics(1)
+
+        region = (
+            max(0, x),
+            max(0, y),
+            min(x + width, screen_w),
+            min(y + height, screen_h)
+        )
+
         logger.debug(f"Capturing region {region}")
         frame = self.camera.grab(region=region)
         if frame is None:
             raise RuntimeError("Failed to capture frame")
         logger.debug(f"Captured frame {frame.shape}")
-        
+
         return Screenshot(
             data=frame,
-            x_offset=origin.x,
-            y_offset=origin.y
+            x_offset=region[0],
+            y_offset=region[1]
         )
 
-    def getPoint(self, x: int, y: int) -> wt.POINT:
+    def windowPoint(self, x: int, y: int) -> tuple[int, int]:
         pt = wt.POINT(x, y)
         ctypes.windll.user32.ClientToScreen(self.window, ctypes.byref(pt))
 
-        return pt
+        return (pt.x, pt.y)
     
     def getDimensions(self) -> tuple[int, int]:
         rect = self.getRect()
@@ -76,13 +86,16 @@ class Window:
             logger.debug(f"Window {self.window} is not focused")
             return False
         
-    def forceFocus(self) -> bool:
+    def forceFocus(self, timeout: float = 2.0, interval: float = 0.05) -> bool:
         if not ctypes.windll.user32.SetForegroundWindow(self.window):
             logger.error(f'Failed to focus window "{self.window}"')
             return False
-        return True
-    
 
-    
+        start = time.perf_counter()
+        while time.perf_counter() - start < timeout:
+            if self.isFocused():
+                return True
+            time.sleep(interval)
 
-    
+        logger.error(f'Window "{self.window}" did not gain focus within {timeout}s')
+        return False

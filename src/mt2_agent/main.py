@@ -11,8 +11,8 @@ PROG = "Metin2 Agent"
 USAGE = "..."
 DESCRIPTION = "..."
 
-SCREENSHOT_PATH = "screenshots"
-TICK_RATE = 1.0
+DEFAULT_SCREENSHOT_PATH = "screenshots"
+DEFAULT_TICK_RATE = 1.0
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +32,17 @@ def main():
     else:
         logging.getLogger('mt2_agent').setLevel(logging.INFO)
     
-    assert_project()
+    assert_project(args)
+    agent_loop(args)
+
+def agent_loop(args: argparse.Namespace):
     window = wm.Window(nthr.WINDOW_CLASS_NAME, nthr.WINDOW_NAME)
+    actions = nthr.NothyrActions(window.windowPoint, window.getDimensions)
 
-    agent_loop(window, args)
-
-def agent_loop(window: wm.Window, args: argparse.Namespace):
-    tick_rate = args.tick_rate or TICK_RATE
-    screenshot_path = args.screenshot_path or SCREENSHOT_PATH
+    actions.open_biolog()
+    
 
     active = True
-
-    time.sleep(3)
     window.forceFocus()
 
     while True:
@@ -61,10 +60,10 @@ def agent_loop(window: wm.Window, args: argparse.Namespace):
 
         if active:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            window.capture().save(os.path.join(screenshot_path, f"{timestamp}.png"))
+            window.capture().save(os.path.join(args.screenshot_path, f"{timestamp}.png"))
 
         elapsed = time.perf_counter() - start
-        time.sleep(max(0, tick_rate - elapsed))
+        time.sleep(max(0, args.tick_rate - elapsed))
 
 def handle_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -73,12 +72,12 @@ def handle_args() -> argparse.Namespace:
         description=DESCRIPTION
     )
 
-    p.add_argument("--tick-rate", type=float, help="Redefine relative screenshot path")
+    p.add_argument("--tick-rate", type=float, default=DEFAULT_TICK_RATE, help="Redefine relative screenshot path")
 
     # Gameplay Features
 
     # Paths
-    p.add_argument("--screenshot-path", help="Redefine relative screenshot path")
+    p.add_argument("--screenshot-path", default=DEFAULT_SCREENSHOT_PATH, help="Redefine relative screenshot path")
 
     # Developer
     p.add_argument("--debug", action='store_true', help="Show developer logs")
@@ -86,8 +85,8 @@ def handle_args() -> argparse.Namespace:
     return p.parse_args()
     
 
-def assert_project():
-    os.makedirs(SCREENSHOT_PATH, exist_ok=True)
+def assert_project(args: argparse.Namespace):
+    os.makedirs(args.screenshot_path, exist_ok=True)
 
 
 if __name__ == "__main__":
