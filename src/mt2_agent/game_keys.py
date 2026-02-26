@@ -1,6 +1,3 @@
-from dataclasses import dataclass
-
-@dataclass
 class GameKeys:
     ESCAPE: str = "esc"
     CTRL: str = "ctrl"
@@ -8,4 +5,4 @@ class GameKeys:
 
     H: str = "h"
 
-    OPEN_BIOLOG_KEY: str = None
+    OPEN_BIOLOG_KEY: str

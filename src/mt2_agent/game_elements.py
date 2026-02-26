@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Union
 
 NAMED_ANCHORS = {
     "top-left":      (0.0, 0.0),
@@ -13,7 +12,7 @@ NAMED_ANCHORS = {
 
 @dataclass
 class GamePt:
-    anchor: Union[str, tuple[float, float]]
+    anchor: tuple[float, float]
     offset: tuple[float, float]
 
     @property

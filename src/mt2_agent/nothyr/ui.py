@@ -1,4 +1,4 @@
-from ..game_elements import GamePt, GameRec, NAMED_ANCHORS
+from ..game_elements import GamePt, NAMED_ANCHORS
 from ..game_ui import GameUI
 
 class NothyrUI(GameUI):

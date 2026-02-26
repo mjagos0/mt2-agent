@@ -3,11 +3,14 @@ from .game_actions import (
     MoveCursor, LeftClick, RightClick,
     CompareImage
 )
-from .window_manager import Window, Screenshot
+from .window_manager import Window
 from .game_elements import GamePt, GameRec
+from .game_actions import GameAction
 
 import logging
 import time
+from collections.abc import Generator
+from pathlib import Path
 
 import interception
 
@@ -19,14 +22,14 @@ class GameExecutor:
         self.window = window
         self.action_delay = action_delay
 
-    def execute(self, actions):
+    def execute(self, actions: Generator[GameAction, None, None]) -> None:
         """Consume a generator of actions and execute each one."""
         for action in actions:
             logger.debug(f"Executing: {action}")
             self._dispatch(action)
             time.sleep(self.action_delay)
 
-    def _dispatch(self, action):
+    def _dispatch(self, action: GameAction) -> None:
         match action:
             case PressKey(key=key):
                 self._press_key(key)
@@ -59,7 +62,7 @@ class GameExecutor:
 
     def _move_cursor(self, target: GamePt):
         x, y = self.window.gamept_to_screenpt(target)
-        logger.indebugfo(f"Move cursor to: ({x}, {y})")
+        logger.debug(f"Move cursor to: ({x}, {y})")
         interception.move_to(x, y)
 
     def _left_click(self):
@@ -70,8 +73,8 @@ class GameExecutor:
         logger.debug("Right click")
         interception.click(button="right")
 
-    def _compare_image(self, region: GameRec, reference: str) -> bool:
-        screenshot = self.window.capture(region)
+    def _compare_image(self, region: GameRec, reference: Path) -> bool:
+        # screenshot = self.window.capture(region)
         logger.info(f"Comparing region to {reference}")
         # cv2 template matching here
         return False

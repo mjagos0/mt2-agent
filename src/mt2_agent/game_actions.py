@@ -1,5 +1,7 @@
-from dataclasses import dataclass
 from .game_elements import GamePt, GameRec
+
+from dataclasses import dataclass
+from pathlib import Path
 
 @dataclass
 class PressKey:
@@ -28,7 +30,7 @@ class RightClick:
 @dataclass
 class CompareImage:
     region: GameRec
-    reference: str  # path to reference image
+    reference: Path  # path to reference image
 
 # Union type for type checking
-Action = PressKey | MoveCursor | CompareImage
+GameAction = PressKey | HoldKey | ReleaseKey | MoveCursor | LeftClick | RightClick | CompareImage

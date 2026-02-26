@@ -1,13 +1,11 @@
 from .game_interface import GameInterface
-from .window_manager import Window, Screenshot
-from .game_elements import GamePt, GameRec
+from .window_manager import Window
 from .game_executor import GameExecutor
 
 from . import nothyr as noth
 
 import argparse
 import time
-from datetime import datetime
 import os
 import logging
 
@@ -92,8 +90,8 @@ class MetinAgent:
     executor: GameExecutor
 
     agent_active: bool
-    last_run_start: time
-    last_update: time
+    last_run_start: float
+    last_update: float
 
     def __init__(self, game: GameInterface, window: Window):
         self.game = game
@@ -102,9 +100,9 @@ class MetinAgent:
         self.agent_active = False
 
     def run(self, args: argparse.Namespace):
-        UPDATE_INTERVAL = args.update_interval
-        DURATION = args.duration
-        SCREENSHOT_PATH = args.screenshot_path
+        # UPDATE_INTERVAL = args.update_interval
+        # DURATION = args.duration
+        # SCREENSHOT_PATH = args.screenshot_path
 
         self.agent_active = True
         self.last_run_start = time.time()
@@ -132,9 +130,9 @@ class MetinAgent:
     def assertWindowFocused(self):
         focused = self.window.isFocused()
 
-        if focused and not self.active:
+        if focused and not self.agent_active:
             self.toggleAgentActive()
-        elif not focused and self.active:
+        elif not focused and self.agent_active:
             self.toggleAgentActive()
 
     def toggleAgentActive(self):

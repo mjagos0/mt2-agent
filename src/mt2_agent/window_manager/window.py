@@ -6,21 +6,22 @@ import ctypes.wintypes as wt
 import logging
 import time
 
-import bettercam
+import bettercam  # type: ignore[import-untyped]
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Ideas:
-# Cache resolution and cache and validate once per cycle, prevents calling windows API several times per cycle
 
 class Window:
     window: wt.HWND
     camera: bettercam.BetterCam
+    scale: float
 
-    def __init__(self):
-        self.camera = bettercam.create()
+    def __init__(self) -> None:
+        self.camera: bettercam.BetterCam = bettercam.create()
+        self.scale = self.getScaleFactor()
 
-    def findWindow(self, class_name: str = None, window_name: str = None):
+    def findWindow(self, class_name: str | None = None, window_name: str | None = None) -> int:
         logger.debug(f'Searching for window (class="{class_name}", name="{window_name}")')
         matches = self._enumerate_matching_windows(class_name, window_name)
 
@@ -41,12 +42,14 @@ class Window:
         logger.info(f'Attached to window "{title}" (hwnd={hwnd})')
         return hwnd
 
-    def _enumerate_matching_windows(self, class_name: str = None, window_name: str = None):
-        results = []
+    def _enumerate_matching_windows(
+        self, class_name: str | None = None, window_name: str | None = None
+    ) -> list[tuple[wt.HWND, str, str]]:
+        results: list[tuple[wt.HWND, str, str]] = []
         buf_size = 256
 
         @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
-        def enum_cb(hwnd, _):
+        def enum_cb(hwnd: wt.HWND, _: wt.LPARAM) -> bool:
             cls_buf = ctypes.create_unicode_buffer(buf_size)
             ctypes.windll.user32.GetClassNameW(hwnd, cls_buf, buf_size)
             cls = cls_buf.value
@@ -64,16 +67,16 @@ class Window:
 
         ctypes.windll.user32.EnumWindows(enum_cb, 0)
         return results
-    
-    def capture(self, gameRec: GameRec = None) -> Screenshot:
-        if gameRec:
+
+    def capture(self, gameRec: GameRec | None = None) -> Screenshot:
+        if gameRec is not None:
             x1, y1, x2, y2 = self.gamerec_to_screenrec(gameRec)
             region = (x1, y1, x2, y2)
         else:
             x, y = self.screenPt(0, 0)
             width, height = self.getResolution()
-            screen_w = ctypes.windll.user32.GetSystemMetrics(0)
-            screen_h = ctypes.windll.user32.GetSystemMetrics(1)
+            screen_w: int = ctypes.windll.user32.GetSystemMetrics(0)
+            screen_h: int = ctypes.windll.user32.GetSystemMetrics(1)
             region = (
                 max(0, x),
                 max(0, y),
@@ -82,7 +85,7 @@ class Window:
             )
 
         logger.debug(f"Capturing region {region}")
-        frame = self.camera.grab(region=region)
+        frame: np.ndarray[Any, Any] | None = self.camera.grab(region=region)
         if frame is None:
             raise RuntimeError("Failed to capture frame")
         logger.debug(f"Captured frame {frame.shape}")
@@ -92,54 +95,54 @@ class Window:
             x_offset=region[0],
             y_offset=region[1]
         )
-    
-    def gamept_to_screenpt(self, gamePt: GamePt):
-        width, height = self.getResolution()
 
-        # WindowPt
-        x = round(gamePt.widthAnchor() * width + gamePt.widthOffset)
-        y = round(gamePt.heightAnchor() * height + gamePt.heightOffset)
-
-        # ScreenPt
+    def gamept_to_screenpt(self, gamePt: GamePt) -> tuple[int, int]:
+        width, height = self.getGameResolution()
+        x = round(gamePt.widthAnchor * width + gamePt.widthOffset)
+        y = round(gamePt.heightAnchor * height + gamePt.heightOffset)
         return self.screenPt(x, y)
-    
-    def gamerec_to_screenrec(self, gameRec: GameRec):
+
+    def gamerec_to_screenrec(self, gameRec: GameRec) -> tuple[int, int, int, int]:
         x, y = self.gamept_to_screenpt(gameRec)
-        w = round(gameRec.width[0] * self.getScaleFactor())
-        h = round(gameRec.height[1] * self.getScaleFactor())
+        w = round(gameRec.width * self.getScaleFactor())
+        h = round(gameRec.height * self.getScaleFactor())
         return (x, y, x + w, y + h)
 
     def screenPt(self, x: int, y: int) -> tuple[int, int]:
         pt = wt.POINT(round(x * self.scale), round(y * self.scale))
         ctypes.windll.user32.ClientToScreen(self.window, ctypes.byref(pt))
-        
         return (pt.x, pt.y)
     
+    def getGameResolution(self) -> tuple[int, int]:
+        w, h = self.getResolution()
+        scale = self.scale
+        return (round(w / scale), round(h / scale))
+
     def getResolution(self) -> tuple[int, int]:
         rect = wt.RECT()
         if not ctypes.windll.user32.GetClientRect(self.window, ctypes.byref(rect)):
             logger.error(f"Failed to get RECT of window {self.window}")
 
         return rect.right - rect.left, rect.bottom - rect.top
-    
+
     def getScaleFactor(self) -> float:
         return ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
-    
-    def assertAlive(self):
+
+    def assertAlive(self) -> None:
         if not bool(ctypes.windll.user32.IsWindow(self.window)):
             logger.error(f'Window handle "{self.window}" is no longer valid')
             raise RuntimeError("Lost connection to window")
         else:
             logger.debug(f"Window {self.window} exists")
-        
+
     def isFocused(self) -> bool:
-        if (ctypes.windll.user32.GetForegroundWindow() == self.window):
+        if ctypes.windll.user32.GetForegroundWindow() == self.window:
             logger.debug(f"Window {self.window} is focused")
             return True
         else:
             logger.debug(f"Window {self.window} is not focused")
             return False
-        
+
     def forceFocus(self, timeout: float = 2.0, interval: float = 0.05) -> bool:
         if not ctypes.windll.user32.SetForegroundWindow(self.window):
             logger.error(f'Failed to focus window "{self.window}"')
