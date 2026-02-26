@@ -8,11 +8,14 @@ from .ui import NothyrUI
 
 class Nothyr(GameInterface):
     SERVER = "Nothyr"
-    WINDOW_CLASS_NAME = "eter - s0:b4:p:6a1ed0"
+    WINDOW_CLASS_NAME = "eter - "
+    WINDOW_NAME = "Nothyr"
     
-    keys: GameKeys = NothyrKeys()
-    ui = NothyrUI()
-    
+    def __init__(self):
+        super().__init__()
+        self.keys: GameKeys = NothyrKeys()
+        self.ui = NothyrUI()
+        
     def biolog(self):
         yield act.PressKey(self.keys.OPEN_BIOLOG_KEY)
         yield act.MoveCursor(self.ui.BIOLOG_SHOP)

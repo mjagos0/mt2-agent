@@ -1,6 +1,7 @@
 from .game_interface import GameInterface
 from .window_manager import Window, Screenshot
 from .game_elements import GamePt, GameRec
+from .game_executor import GameExecutor
 
 from . import nothyr as noth
 
@@ -88,6 +89,8 @@ def get_window(game: GameInterface):
 class MetinAgent:
     game: GameInterface
     window: Window
+    executor: GameExecutor
+
     agent_active: bool
     last_run_start: time
     last_update: time
@@ -95,6 +98,7 @@ class MetinAgent:
     def __init__(self, game: GameInterface, window: Window):
         self.game = game
         self.window = window
+        self.executor = GameExecutor(window)
         self.agent_active = False
 
     def run(self, args: argparse.Namespace):
@@ -105,17 +109,19 @@ class MetinAgent:
         self.agent_active = True
         self.last_run_start = time.time()
 
-        while DURATION is None or time.time() - self.last_run_start < DURATION:
-            self.last_update = time.perf_counter()
+        self.executor.execute(self.game.biolog())
+
+        # while DURATION is None or time.time() - self.last_run_start < DURATION:
+        #     self.last_update = time.perf_counter()
             
-            self.assertWindowAlive()
-            self.assertWindowFocused()
+        #     self.assertWindowAlive()
+        #     self.assertWindowFocused()
 
-            if (self.agent_active):
-                self.window.capture()
+        #     if (self.agent_active):
+        #         self.window.capture()
 
-            elapsed = time.perf_counter() - self.last_update
-            time.sleep(max(0, UPDATE_INTERVAL - elapsed))
+        #     elapsed = time.perf_counter() - self.last_update
+        #     time.sleep(max(0, UPDATE_INTERVAL - elapsed))
 
     def assertWindowAlive(self):
         try:
@@ -137,11 +143,11 @@ class MetinAgent:
         else:
             logger.info("Agent resumed")
 
-    def takeScreenshot(gameRec: GameRec) -> Screenshot:
+    # def takeScreenshot(gameRec: GameRec) -> Screenshot:
         
 
-    def getScreen(screenshot: Screenshot):
-        screenshot.save(os.path.join(args.screenshot_path, f"{timestamp}.png"))
+    # def getScreen(screenshot: Screenshot):
+    #     screenshot.save(os.path.join(args.screenshot_path, f"{timestamp}.png"))
 
         
     

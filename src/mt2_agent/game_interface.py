@@ -8,10 +8,12 @@ from .game_icons import GameIcons
 class GameInterface(ABC):
     SERVER: str
     WINDOW_CLASS_NAME: str
+    WINDOW_NAME: str
 
-    keys: GameKeys = GameKeys()
-    ui: GameUI = GameUI()
-    icons: GameIcons = GameIcons()
+    def __init__(self):
+        self.keys = GameKeys()
+        self.ui = GameUI()
+        self.icons = GameIcons()
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

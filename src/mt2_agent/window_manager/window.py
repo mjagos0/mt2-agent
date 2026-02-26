@@ -20,16 +20,50 @@ class Window:
     def __init__(self):
         self.camera = bettercam.create()
 
-    def findWindow(self, class_name: str):
-        logger.debug(f'Searching for window "{class_name}"')
-        hwnd = ctypes.windll.user32.FindWindowW(class_name, None)
-        if not hwnd:
-            raise RuntimeError(f'Window with classa name {class_name} not found')
-        else:
-            self.window = hwnd
-            logger.info(f'Attached to window "{hwnd}"')
+    def findWindow(self, class_name: str = None, window_name: str = None):
+        logger.debug(f'Searching for window (class="{class_name}", name="{window_name}")')
+        matches = self._enumerate_matching_windows(class_name, window_name)
 
+        if not matches:
+            raise RuntimeError(
+                f'No window found matching class="{class_name}", name="{window_name}"'
+            )
+        elif len(matches) == 1:
+            hwnd, cls, title = matches[0]
+        else:
+            print("Multiple matching windows found:")
+            for i, (hwnd, cls, title) in enumerate(matches):
+                print(f"  [{i}] {title!r} (class={cls!r}, hwnd={hwnd})")
+            choice = int(input("Select window index: "))
+            hwnd, cls, title = matches[choice]
+
+        self.window = hwnd
+        logger.info(f'Attached to window "{title}" (hwnd={hwnd})')
         return hwnd
+
+    def _enumerate_matching_windows(self, class_name: str = None, window_name: str = None):
+        results = []
+        buf_size = 256
+
+        @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+        def enum_cb(hwnd, _):
+            cls_buf = ctypes.create_unicode_buffer(buf_size)
+            ctypes.windll.user32.GetClassNameW(hwnd, cls_buf, buf_size)
+            cls = cls_buf.value
+
+            title_buf = ctypes.create_unicode_buffer(buf_size)
+            ctypes.windll.user32.GetWindowTextW(hwnd, title_buf, buf_size)
+            title = title_buf.value
+
+            class_ok = class_name is None or class_name.lower() in cls.lower()
+            name_ok = window_name is None or window_name.lower() in title.lower()
+
+            if class_ok and name_ok:
+                results.append((hwnd, cls, title))
+            return True
+
+        ctypes.windll.user32.EnumWindows(enum_cb, 0)
+        return results
     
     def capture(self, gameRec: GameRec = None) -> Screenshot:
         if gameRec:

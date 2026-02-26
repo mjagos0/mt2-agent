@@ -26,13 +26,9 @@ class RightClick:
     ...
 
 @dataclass
-class CaptureRegion:
-    region: GameRec
-
-@dataclass
 class CompareImage:
     region: GameRec
     reference: str  # path to reference image
 
 # Union type for type checking
-Action = PressKey | MoveCursor | CaptureRegion | CompareImage
+Action = PressKey | MoveCursor | CompareImage
