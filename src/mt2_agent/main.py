@@ -1,6 +1,9 @@
 from .game_interface import GameInterface
 from .window_manager import Window
 from .game_executor import GameExecutor
+from .game_ui import GameUI
+from .game_keys import GameKeys
+from .game_actions import PressKey
 
 from . import nothyr as noth
 
@@ -8,6 +11,8 @@ import argparse
 import time
 import os
 import logging
+import heapq
+from dataclasses import dataclass, field
 
 PROG = "Metin2 Agent"
 USAGE = "..."
@@ -41,6 +46,7 @@ def main():
     assert_project(args)
     game = get_game(args)
     window = get_window(game)
+    window.forceFocus()
 
     agent = MetinAgent(game, window)
     agent.run(args)
@@ -60,6 +66,9 @@ def handle_args() -> argparse.Namespace:
 
     # Paths
     p.add_argument("--screenshot-path", default=DEFAULT_SCREENSHOT_PATH, help="Redefine relative screenshot path")
+
+    # Advanced
+    p.add_argument("--executor-throttle", type=float, default=0.0, help="Adds delay between every action of an executor")
 
     # Developer
     p.add_argument("--debug", action='store_true', help="Show developer logs")
@@ -84,42 +93,62 @@ def get_window(game: GameInterface):
         raise RuntimeError(f'Could not find window {game.SERVER} window. Is the game running?')
 
 
+@dataclass(order=True)
+class ScheduledTask:
+    next_run: float
+    name: str = field(compare=False)
+    action_fn: callable = field(compare=False)
+    interval: float = field(compare=False)
+
+
 class MetinAgent:
-    game: GameInterface
-    window: Window
-    executor: GameExecutor
-
-    agent_active: bool
-    last_run_start: float
-    last_update: float
-
     def __init__(self, game: GameInterface, window: Window):
         self.game = game
         self.window = window
-        self.executor = GameExecutor(window)
-        self.agent_active = False
+        self.executor: GameExecutor | None = None
+        self._heap: list[ScheduledTask] = []
+
+    def _schedule(self, name: str, action_fn, interval: float):
+        task = ScheduledTask(
+            next_run=time.monotonic(),
+            name=name,
+            action_fn=action_fn,
+            interval=interval,
+        )
+        heapq.heappush(self._heap, task)
 
     def run(self, args: argparse.Namespace):
-        # UPDATE_INTERVAL = args.update_interval
-        # DURATION = args.duration
-        # SCREENSHOT_PATH = args.screenshot_path
 
-        self.agent_active = True
-        self.last_run_start = time.time()
+        self.window.capture(GameUI.COORDINATES).save("coordinates.png")
+        return
+        self.executor = GameExecutor(self.window, args.executor_throttle)
+        update_interval = args.update_interval / 1000
 
-        self.executor.execute(self.game.biolog())
+        # Register all periodic tasks (including the main loop)
+        self._schedule("spells", self.game.try_cast_spells, update_interval)
+        self._schedule("pickup", self.game.pickup_items, 0.5)
+        self._schedule("cape",   self.game.bravery_cape,  3.0)
 
-        # while DURATION is None or time.time() - self.last_run_start < DURATION:
-        #     self.last_update = time.perf_counter()
-            
-        #     self.assertWindowAlive()
-        #     self.assertWindowFocused()
+        while self._should_run(args):
+            # Peek at the earliest task — O(1)
+            task = self._heap[0]
 
-        #     if (self.agent_active):
-        #         self.window.capture()
+            sleep_for = task.next_run - time.monotonic()
+            if sleep_for > 0:
+                time.sleep(sleep_for)
 
-        #     elapsed = time.perf_counter() - self.last_update
-        #     time.sleep(max(0, UPDATE_INTERVAL - elapsed))
+            # Pop and execute
+            task = heapq.heappop(self._heap)
+            self.executor.execute(task.action_fn())
+
+            # Reschedule
+            task.next_run = time.monotonic() + task.interval
+            heapq.heappush(self._heap, task)
+
+    def _should_run(self, args: argparse.Namespace) -> bool:
+        if args.duration is None:
+            return True
+        return time.monotonic() - self.last_run_start < args.duration
 
     def assertWindowAlive(self):
         try:
@@ -141,13 +170,10 @@ class MetinAgent:
         else:
             logger.info("Agent resumed")
 
-    # def takeScreenshot(gameRec: GameRec) -> Screenshot:
-        
-
-    # def getScreen(screenshot: Screenshot):
-    #     screenshot.save(os.path.join(args.screenshot_path, f"{timestamp}.png"))
-
-        
+    # def take_screenshot(self, screenshot_path: str):
+    #     screenshot = self.window.capture()
+    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #     screenshot.save(os.path.join(screenshot_path, f"{timestamp}.png"))
     
 if __name__ == "__main__":
     main()

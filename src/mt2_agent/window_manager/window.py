@@ -20,6 +20,7 @@ class Window:
     def __init__(self) -> None:
         self.camera: bettercam.BetterCam = bettercam.create()
         self.scale = self.getScaleFactor()
+        self.camera.start()
 
     def findWindow(self, class_name: str | None = None, window_name: str | None = None) -> int:
         logger.debug(f'Searching for window (class="{class_name}", name="{window_name}")')
@@ -42,32 +43,6 @@ class Window:
         logger.info(f'Attached to window "{title}" (hwnd={hwnd})')
         return hwnd
 
-    def _enumerate_matching_windows(
-        self, class_name: str | None = None, window_name: str | None = None
-    ) -> list[tuple[wt.HWND, str, str]]:
-        results: list[tuple[wt.HWND, str, str]] = []
-        buf_size = 256
-
-        @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
-        def enum_cb(hwnd: wt.HWND, _: wt.LPARAM) -> bool:
-            cls_buf = ctypes.create_unicode_buffer(buf_size)
-            ctypes.windll.user32.GetClassNameW(hwnd, cls_buf, buf_size)
-            cls = cls_buf.value
-
-            title_buf = ctypes.create_unicode_buffer(buf_size)
-            ctypes.windll.user32.GetWindowTextW(hwnd, title_buf, buf_size)
-            title = title_buf.value
-
-            class_ok = class_name is None or class_name.lower() in cls.lower()
-            name_ok = window_name is None or window_name.lower() in title.lower()
-
-            if class_ok and name_ok:
-                results.append((hwnd, cls, title))
-            return True
-
-        ctypes.windll.user32.EnumWindows(enum_cb, 0)
-        return results
-
     def capture(self, gameRec: GameRec | None = None) -> Screenshot:
         if gameRec is not None:
             x1, y1, x2, y2 = self.gamerec_to_screenrec(gameRec)
@@ -85,9 +60,13 @@ class Window:
             )
 
         logger.debug(f"Capturing region {region}")
-        frame: np.ndarray[Any, Any] | None = self.camera.grab(region=region)
-        if frame is None:
-            raise RuntimeError("Failed to capture frame")
+        frame = self.camera.get_latest_frame()
+        
+        if gameRec is not None:
+            # Crop the full-screen frame to the desired region
+            x1, y1, x2, y2 = region
+            frame = frame[y1:y2, x1:x2]
+
         logger.debug(f"Captured frame {frame.shape}")
 
         return Screenshot(
@@ -143,16 +122,43 @@ class Window:
             logger.debug(f"Window {self.window} is not focused")
             return False
 
-    def forceFocus(self, timeout: float = 2.0, interval: float = 0.05) -> bool:
+    def forceFocus(self, timeout: float = 2.0, poll_interval: float = 0.05) -> bool:
         if not ctypes.windll.user32.SetForegroundWindow(self.window):
             logger.error(f'Failed to focus window "{self.window}"')
             return False
 
-        start = time.perf_counter()
-        while time.perf_counter() - start < timeout:
-            if self.isFocused():
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if ctypes.windll.user32.GetForegroundWindow() == self.window:
+                logger.debug(f'Window brought forward "{self.window}"')
                 return True
-            time.sleep(interval)
+            time.sleep(poll_interval)
 
-        logger.error(f'Window "{self.window}" did not gain focus within {timeout}s')
+        logger.error(f'Timed out waiting for window "{self.window}" to become foreground')
         return False
+    
+    def _enumerate_matching_windows(
+        self, class_name: str | None = None, window_name: str | None = None
+    ) -> list[tuple[wt.HWND, str, str]]:
+        results: list[tuple[wt.HWND, str, str]] = []
+        buf_size = 256
+
+        @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+        def enum_cb(hwnd: wt.HWND, _: wt.LPARAM) -> bool:
+            cls_buf = ctypes.create_unicode_buffer(buf_size)
+            ctypes.windll.user32.GetClassNameW(hwnd, cls_buf, buf_size)
+            cls = cls_buf.value
+
+            title_buf = ctypes.create_unicode_buffer(buf_size)
+            ctypes.windll.user32.GetWindowTextW(hwnd, title_buf, buf_size)
+            title = title_buf.value
+
+            class_ok = class_name is None or class_name.lower() in cls.lower()
+            name_ok = window_name is None or window_name.lower() in title.lower()
+
+            if class_ok and name_ok:
+                results.append((hwnd, cls, title))
+            return True
+
+        ctypes.windll.user32.EnumWindows(enum_cb, 0)
+        return results

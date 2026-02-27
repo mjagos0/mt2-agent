@@ -21,6 +21,6 @@ class Screenshot:
     
     def save(self, path: str) -> None:
         if cv2.imwrite(path, cv2.cvtColor(self.data, cv2.COLOR_RGB2BGR)):
-            logger.debug("Screenshot saved to {path}")
+            logger.debug(f"Screenshot saved to {path}")
         else:
             raise RuntimeError(f"Failed to save screenshot to {path}")

@@ -1,11 +1,13 @@
 from .game_actions import (
     PressKey, HoldKey, ReleaseKey,
     MoveCursor, LeftClick, RightClick,
-    CompareImage
+    TryCastSpell
 )
 from .window_manager import Window
 from .game_elements import GamePt, GameRec
 from .game_actions import GameAction
+from .util_ability_ready import is_hotkey_castable
+from .util_text_detection import read_coordinates, read_text
 
 import logging
 import time
@@ -18,16 +20,20 @@ logger = logging.getLogger(__name__)
 
 
 class GameExecutor:
-    def __init__(self, window: Window, action_delay: float = 0.3):
+    def __init__(self, window: Window, throttle: float):
         self.window = window
-        self.action_delay = action_delay
+        self.throttle = throttle
+        
+        self.last_coordinates: tuple[int, int] = (0, 0)
+        self.stagnant_frames: int = 0
+        self.stagnant_threshold: int = 5
 
     def execute(self, actions: Generator[GameAction, None, None]) -> None:
         """Consume a generator of actions and execute each one."""
         for action in actions:
             logger.debug(f"Executing: {action}")
             self._dispatch(action)
-            time.sleep(self.action_delay)
+            time.sleep(self.throttle)
 
     def _dispatch(self, action: GameAction) -> None:
         match action:
@@ -43,8 +49,8 @@ class GameExecutor:
                 self._left_click()
             case RightClick():
                 self._right_click()
-            case CompareImage(region=region, reference=reference):
-                self._compare_image(region, reference)
+            case TryCastSpell(hotkey_ui=hotkey_ui, hotkey=hotkey):
+                self._try_cast_spell(hotkey_ui, hotkey)
             case _:
                 raise ValueError(f"Unknown action: {action}")
 
@@ -73,9 +79,35 @@ class GameExecutor:
         logger.debug("Right click")
         interception.click(button="right")
 
-    def _compare_image(self, region: GameRec, reference: Path) -> bool:
-        # screenshot = self.window.capture(region)
-        logger.info(f"Comparing region to {reference}")
-        # cv2 template matching here
-        return False
-    
+    def _try_cast_spell(self, hotkey_ui: GameRec, hotkey: str):
+        screenshot = self.window.capture(hotkey_ui)
+        if is_hotkey_castable(screenshot):
+            self._hold_key("ctrl")
+            self._press_key("h")
+            self._release_key("ctrl")
+            time.sleep(0.05)
+            logger.debug(f"Ability {hotkey_ui} ready")
+            self._press_key(hotkey)
+            self._hold_key("ctrl")
+            self._press_key("h")
+            self._release_key("ctrl")
+        else:
+            logger.debug(f"Ability {hotkey_ui} not ready")
+
+    def _stuck_detection(self, coordinates_ui: GameRec):
+        screenshot = self.window.capture(coordinates_ui)
+        coordinates = read_coordinates(screenshot)
+        if (coordinates == self.last_coordinates):
+            self.stagnant_frames += 1
+            if (self.stagnant_frames >= self.stagnant_threshold):
+                logger.info("Character is stucked. Trying to unstuck...")
+                # unstuck
+                self.stagnant_frames = 0
+            else:
+                logger.debug(f"Coordinates identical to previous frame for {self.stagnant_frames}/{self.stagnant_threshold} frames")
+        else:
+            logger.debug(f"Coordinates updated")
+            self.stagnant_frames = 0
+
+        def unstuck(duration: int, click_interval: float, screen_fraction: float): # TODO: Parametrize
+            ...

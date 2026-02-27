@@ -30,17 +30,22 @@ class GameInterface(ABC):
     def biolog(self) -> Generator[GameAction, None, None]:
         ...
 
-    def cast_spell(self, hotkey: str) -> Generator[GameAction, None, None]:
-        yield act.HoldKey(self.keys.CTRL)
-        yield act.PressKey(self.keys.H)
-        yield act.ReleaseKey(self.keys.CTRL)
-        yield act.PressKey(hotkey) # TODO: Should also handle spells on 1,2,3,4 (try_to_int?)
-        yield act.HoldKey(self.keys.CTRL)
-        yield act.PressKey(self.keys.H)
-        yield act.ReleaseKey(self.keys.CTRL)
+    def try_cast_spells(self) -> Generator[GameAction, None, None]:
+        yield act.TryCastSpell(self.ui.HOTKEY_1, self.keys.HOTKEY_1)
+        yield act.TryCastSpell(self.ui.HOTKEY_2, self.keys.HOTKEY_2)
+        yield act.TryCastSpell(self.ui.HOTKEY_3, self.keys.HOTKEY_3)
+        yield act.TryCastSpell(self.ui.HOTKEY_4, self.keys.HOTKEY_4)
 
-    def use_hotkey(self, hotkey: str) -> Generator[GameAction, None, None]:
-        yield act.PressKey(hotkey) # TODO: Should also handle consumables on f1,f2,f3,f4
+        yield act.TryCastSpell(self.ui.HOTKEY_F1, self.keys.HOTKEY_F1)
+        yield act.TryCastSpell(self.ui.HOTKEY_F2, self.keys.HOTKEY_F2)
+        yield act.TryCastSpell(self.ui.HOTKEY_F3, self.keys.HOTKEY_F3)
+        yield act.TryCastSpell(self.ui.HOTKEY_F4, self.keys.HOTKEY_F4)
 
-    def check_spell_active(self, hotkey: str) -> Generator[GameAction, None, None]:
-        yield act.CompareImage(self.ui.HOTKEY_F2, self.icons.sura.weaponry.enchanted_blade.base_path) # TODO
+    def bravery_cape(self) -> Generator[GameAction, None, None]:
+        yield act.PressKey(self.keys.HOTKEY_1)
+
+    def pickup_items(self) -> Generator[GameAction, None, None]:
+        yield act.PressKey(self.keys.PICKUP_ITEMS)
+
+    def stuck_detection(self) -> Generator[GameAction, None, None]:
+        yield act.StuckDetection(self.ui.COORDINATES)

@@ -28,9 +28,23 @@ class RightClick:
     ...
 
 @dataclass
-class CompareImage:
-    region: GameRec
-    reference: Path  # path to reference image
+class TryCastSpell:
+    hotkey_ui: GameRec
+    hotkey: str
+
+@dataclass
+class StuckDetection:
+    coordinates_ui: GameRec
+
+# @dataclass
+# class CompareImage:
+#     region: GameRec
+#     reference: Path  # path to reference image
+
+# @dataclass
+# class EnsureAbility:
+    
+#     reference: Path  # path to reference image
 
 # Union type for type checking
-GameAction = PressKey | HoldKey | ReleaseKey | MoveCursor | LeftClick | RightClick | CompareImage
+GameAction = PressKey | HoldKey | ReleaseKey | MoveCursor | LeftClick | RightClick | TryCastSpell
