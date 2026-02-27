@@ -75,3 +75,4 @@ class GameExecutor:
         logger.info(f"Comparing region to {reference}")
         # cv2 template matching here
         return False
+    
