@@ -1,4 +1,4 @@
-from .window_manager.screenshot import Screenshot
+from .window.screenshot import Screenshot
 
 import numpy as np
 import logging
@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 DARK_THRESHOLD = 15
 CONSUMABLE_DARK_FRACTION = 0.15
 BUFF_OUTER_BRIGHTNESS = 90
-COOLDOWN_QUAD_RANGE = 12
+COOLDOWN_RATIO_THRESHOLD = 0.8
 
 
 def is_hotkey_castable(screenshot: Screenshot) -> bool:
@@ -18,7 +18,13 @@ def is_hotkey_castable(screenshot: Screenshot) -> bool:
     Returns False if the icon is:
       - A consumable item (black background, not a spell)
       - A buff that is currently active (bright blue aura on outer frame)
-      - A spell on cooldown (clockwise shadow creates quadrant brightness imbalance)
+      - A spell on cooldown (shadow at 11 o'clock probe point)
+
+    The cooldown shadow sweeps clockwise from 12 o'clock. The 11 o'clock
+    position (slightly left of top-center) is the last spot the shadow
+    occupies before the spell becomes ready. We compare brightness there
+    against the 1 o'clock position (first to clear) as a reference.
+    Shadow halves brightness, giving a ratio of ~0.5 vs ~1.0 when ready.
 
     Args:
         screenshot: Captured region of the hotbar icon.
@@ -45,24 +51,20 @@ def is_hotkey_castable(screenshot: Screenshot) -> bool:
 
     outer_brightness = brightness[outer].mean()
     if outer_brightness > BUFF_OUTER_BRIGHTNESS:
-        logger.debug("Ability unavailable: buff active (outer_brightness=%.1f)", outer_brightness)
+        logger.debug(
+            "Ability unavailable: buff active (outer_brightness=%.1f)", outer_brightness
+        )
         return False
 
-    # --- Check 3: Cooldown shadow (quadrant brightness imbalance) ---
-    border = 5
-    inner = brightness[border:h - border, border:w - border]
-    ih, iw = inner.shape
-    cy, cx = ih // 2, iw // 2
+    # --- Check 3: Cooldown shadow (11 o'clock vs 1 o'clock brightness) ---
+    cx = w // 2
+    probe_rows = slice(3, 7)
+    probe_11 = brightness[probe_rows, cx - 5 : cx - 1].mean()
+    probe_1 = brightness[probe_rows, cx + 1 : cx + 6].mean()
 
-    quad_means = [
-        inner[:cy, :cx].mean(),
-        inner[:cy, cx:].mean(),
-        inner[cy:, :cx].mean(),
-        inner[cy:, cx:].mean(),
-    ]
-    quad_range = max(quad_means) - min(quad_means)
-    if quad_range > COOLDOWN_QUAD_RANGE:
-        logger.debug("Ability unavailable: on cooldown (quad_range=%.1f)", quad_range)
+    ratio = probe_11 / (probe_1 + 1)
+    if ratio < COOLDOWN_RATIO_THRESHOLD:
+        logger.debug("Ability unavailable: on cooldown (ratio=%.3f)", ratio)
         return False
 
     return True
