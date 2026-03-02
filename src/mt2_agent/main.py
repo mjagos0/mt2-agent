@@ -11,6 +11,8 @@ import logging
 import heapq
 import shutil
 from dataclasses import dataclass, field
+from collections.abc import Callable
+from pathlib import Path
 
 PROG = "Metin2 Agent"
 USAGE = "..."
@@ -40,7 +42,7 @@ def main():
     else:
         logging.getLogger("mt2_agent").setLevel(logging.INFO)
 
-    input_overrides = {}
+    input_overrides: dict[str, Input] = {}
     if args.rebind:
         for name, key in args.rebind:
             input_overrides[name] = Input(keyboard=KeyboardInput(key))
@@ -235,7 +237,7 @@ def assert_project(args: argparse.Namespace) -> None:
         os.makedirs(args.debug_folder_screenshots, exist_ok=True)
 
 
-def get_game(args: argparse.Namespace, input_overrides: dict) -> GameInterface:
+def get_game(args: argparse.Namespace, input_overrides: dict[str, Input]) -> GameInterface:
     if args.server not in SERVERS:
         raise ValueError(
             f"Unknown server: '{args.server}'. Choose from: {list(SERVERS.keys())}"
@@ -258,7 +260,7 @@ def get_window(game: GameInterface):
 class ScheduledTask:
     next_run: float
     name: str = field(compare=False)
-    action_fn: callable = field(compare=False)
+    action_fn: Callable[[], None] = field(compare=False)
     interval: float = field(compare=False)
 
 
@@ -273,7 +275,7 @@ class MetinAgent:
             None if args.duration is None else time.monotonic() + args.duration
         )
 
-    def _schedule(self, name: str, action_fn, interval: float):
+    def _schedule(self, name: str, action_fn: Callable[[], None], interval: float):
         if interval == 0:
             logger.info(f"{name} not scheduled")
             return
@@ -288,9 +290,21 @@ class MetinAgent:
             heapq.heappush(self._heap, task)
 
     def run(self):
+        # self.game.window.capture(self.game.ui.HOTKEY_F1).save(Path("HOTKEY_F1.png"))
+        # self.game.window.capture(self.game.ui.HOTKEY_F2).save(Path("HOTKEY_F2.png"))
+        # self.game.window.capture(self.game.ui.HOTKEY_F3).save(Path("HOTKEY_F3.png"))
+        # self.game.window.capture(self.game.ui.HOTKEY_F4).save(Path("HOTKEY_F4.png"))
+        # logger.info(self.game.window.getScaleFactor())
+
+        # return
+
+        # self.game.window.capture(self.game.ui.CAPTCHA_DETECT).save(Path("Captcha.png"))
+        # return
         # self.game.pickup_items()
         # return
         # Register all periodic tasks
+        self._schedule("login", self.game.login, 5)
+        self._schedule("respawn", self.game.respawn, 5)
         self._schedule("auto-cast", self.game.cast_spells, self.args.auto_cast_interval)
         self._schedule(
             "auto-pickup", self.game.pickup_items, self.args.auto_pickup_interval
@@ -305,6 +319,8 @@ class MetinAgent:
             "auto-target", self.game.auto_target, self.args.auto_target_interval
         )
         self._schedule("captcha", self.game.captcha, self.args.captcha_check)
+        # self._schedule("biolog", self.game.biolog, 5)
+        
 
         while self._should_run():
             self.assertWindowAlive()

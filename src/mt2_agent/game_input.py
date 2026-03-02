@@ -2,9 +2,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 import interception
-from interception import beziercurve
-import pytweening
+from interception import beziercurve, MouseButton
+import pytweening # type: ignore[import-untyped]
+from typing import cast, Any
 
+import math
+import random
 import time
 
 from .window import ScreenPt
@@ -21,7 +24,7 @@ LINEAR_PARAMS = beziercurve.BezierCurveParams(
     distortion_mean=0,
     distortion_stdev=0,
     distortion_frequency=0,
-    tween=pytweening.linear,
+    tween=cast(Any, pytweening.linear),
     target_points=100,
 )
 BEZIER_PARAMS = beziercurve.BezierCurveParams()
@@ -34,7 +37,7 @@ class FunctionKey:
 
 @dataclass(frozen=True)
 class Click:
-    key: str
+    key: MouseButton
 
 
 @dataclass(frozen=True)
@@ -64,7 +67,10 @@ class Input:
 
 @dataclass
 class GameInputs:
-    min_action_delay: float
+    _min_action_delay: float = field(default=0.04, init=False)
+    _delay_spread: float = field(default=0.02, init=False)
+    _delay_sigma: float = field(default=0.5, init=False)
+
     _last_action_time: float = field(default=0.0, init=False)
 
     ESCAPE = FunctionKey("esc")
@@ -88,6 +94,9 @@ class GameInputs:
     TOGGLE_HORSE: Input = Input(keyboard=KeyboardInput("h", CTRL))
     BRAVERY_CAPE: Input = HOTKEY_1
 
+    LOGIN_1: Input = Input(keyboard=KeyboardInput("f1"))
+    LOGIN_CONFIRM: Input = Input(keyboard=KeyboardInput("return"))
+
     # Mouse-only actions
     LEFT_CLICK: Input = Input(mouse=MouseInput(click=CLICK_LEFT))
     RIGHT_CLICK: Input = Input(mouse=MouseInput(click=CLICK_RIGHT))
@@ -109,13 +118,33 @@ class GameInputs:
             self.HOTKEY_F4,
         ]
 
+    def _random_delay(self, min_delay: float | None = None) -> float:
+        gamma = min_delay if min_delay is not None else self._min_action_delay
+        if self._delay_spread <= 0:
+            return gamma
+
+        sigma = self._delay_sigma
+        mu = math.log(self._delay_spread) - (sigma ** 2) / 2
+
+        return gamma + random.lognormvariate(mu, sigma)
+
+    def _cooldown(self, min_delay: float | None = None):
+        delay = self._random_delay(min_delay)
+        if delay <= 0:
+            return
+        elapsed = time.monotonic() - self._last_action_time
+        remaining = delay - elapsed
+        if remaining > 0:
+            time.sleep(remaining)
+        self._last_action_time = time.monotonic()
+
     def click(
         self,
         pt: ScreenPt,
-        button: str = "left",
+        button: MouseButton = "left",
         modifier: FunctionKey | None = None,
         movement: MovementType = MovementType.Instant,
-        extra_delay: float = 0.0,
+        min_delay: float | None = None,
     ) -> None:
         click = Click(button)
         self.execute(
@@ -126,14 +155,14 @@ class GameInputs:
                     function_key=modifier,
                 )
             ),
-            extra_delay,
+            min_delay=min_delay,
         )
 
     def move(
         self,
         pt: ScreenPt,
         movement: MovementType = MovementType.Instant,
-        extra_delay: float = 0.0,
+        min_delay: float | None = None,
     ) -> None:
         self.execute(
             Input(
@@ -141,17 +170,8 @@ class GameInputs:
                     position=Position(pt, movement),
                 )
             ),
-            extra_delay,
+            min_delay=min_delay,
         )
-
-    def _cooldown(self, extra_delay: float):
-        if self.min_action_delay <= 0:
-            return
-        elapsed = time.monotonic() - self._last_action_time
-        remaining = self.min_action_delay + extra_delay - elapsed
-        if remaining > 0:
-            time.sleep(remaining)
-        self._last_action_time = time.monotonic()
 
     def _move_mouse(self, position: Position):
         x, y = position.coordinates.as_tuple()
@@ -170,20 +190,24 @@ class GameInputs:
         if fc_key:
             interception.key_up(fc_key.key)
 
-    def execute(self, input: Input, extra_delay: float = 0.0):
+    def execute(
+        self,
+        input: Input,
+        min_delay: float | None = None,
+    ):
         if input.keyboard is not None:
             kb = input.keyboard
             assert kb.key is not None
-            self._cooldown(extra_delay)
+            self._cooldown(min_delay)
             self._press_with_modifier(kb.key, kb.function_key)
 
         if input.mouse is not None:
             ms = input.mouse
             if ms.position is not None:
-                self._cooldown(extra_delay)
+                self._cooldown(min_delay)
                 self._move_mouse(ms.position)
             if ms.click is not None:
-                self._cooldown(extra_delay)
+                self._cooldown(min_delay)
                 if ms.function_key:
                     interception.key_down(ms.function_key.key)
                 interception.click(button=ms.click.key)

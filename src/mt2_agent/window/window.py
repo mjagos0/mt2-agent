@@ -7,7 +7,6 @@ import ctypes.wintypes as wt
 import logging
 import time
 import random
-from dataclasses import dataclass
 
 import bettercam  # type: ignore[import-untyped]
 
@@ -19,12 +18,12 @@ class Window:
     camera: bettercam.BetterCam
 
     def __init__(self) -> None:
-        self.camera: bettercam.BetterCam = bettercam.create()
-        self.camera.start()
+        self.camera: bettercam.BetterCam = bettercam.create()  # type: ignore[reportUnknownMemberType]
+        self.camera.start()  # type: ignore[reportUnknownMemberType]
 
     def findWindow(
         self, class_name: str | None = None, window_name: str | None = None
-    ) -> int:
+    ) -> wt.HWND:
         logger.debug(
             f'Searching for window (class="{class_name}", name="{window_name}")'
         )

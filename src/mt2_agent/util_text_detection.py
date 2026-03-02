@@ -1,7 +1,8 @@
 from .window import Screenshot
 
-import pytesseract
-import numpy as np
+from typing import cast
+
+import pytesseract  # type: ignore[import-untyped]
 import cv2
 import re
 
@@ -13,7 +14,7 @@ def read_coordinates(screenshot: Screenshot) -> tuple[int, int] | None:
     _, bw = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
 
     config = r"-c tessedit_char_whitelist=0123456789(), --psm 7"
-    text = pytesseract.image_to_string(bw, config=config)
+    text = cast(str, pytesseract.image_to_string(bw, config=config)) # type: ignore[reportUnknownMemberType]
 
     match = re.search(r"\((\d+),\s*(\d+)\)", text)
     if match:
@@ -28,6 +29,6 @@ def read_text(screenshot: Screenshot, lang: str = "ces") -> str | None:
     _, bw = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
 
     config = r"--psm 7 --oem 1"
-    text = pytesseract.image_to_string(bw, lang=lang, config=config).strip()
+    text = cast(str, pytesseract.image_to_string(bw, lang=lang, config=config)).strip() # type: ignore[reportUnknownMemberType]
 
     return text if text else None

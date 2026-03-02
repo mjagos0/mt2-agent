@@ -1,7 +1,7 @@
-from .window import Window, ScreenPt, ScreenRectangle, Screenshot
+from .window import Window, ScreenPt, Screenshot
 from .game_input import GameInputs, Input, MovementType
-from .game_ui import GameUI, GameRectangle, GamePt
-from .asset_manager import AssetManager, Asset, AssetImage, AssetGroup
+from .game_ui import GameUI, GameRectangle
+from .asset_manager import AssetManager, AssetImage
 from .stuck_detection import StuckDetector
 
 from .util_ability_ready import is_hotkey_castable
@@ -9,7 +9,7 @@ from .util_text_detection import read_coordinates, read_text
 from .util_object_detection import ObjectDetector, Label
 from .util_template_matching import find_first, find_template
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any
 import argparse
 import time
@@ -25,6 +25,7 @@ class GameInterface(ABC):
     SERVER: str
     WINDOW_CLASS_NAME: str
     WINDOW_NAME: str
+    SERVER_ASSETS: str
 
     args: argparse.Namespace
     inputs: GameInputs
@@ -35,11 +36,11 @@ class GameInterface(ABC):
     obj_det: ObjectDetector
     asset: AssetManager
 
-    def __init__(self, args: argparse.Namespace, input_overrides: dict):
+    def __init__(self, args: argparse.Namespace, input_overrides: dict[str, Input]):
         self._get_window()
 
         self.args = args
-        self.inputs = GameInputs(min_action_delay=args.input_delay, **input_overrides)
+        self.inputs = GameInputs(**input_overrides)
         self.ui = GameUI()
 
         self.stuck = StuckDetector(args.unstuck_check_interval, args.unstuck_threshold)
@@ -54,7 +55,7 @@ class GameInterface(ABC):
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
-        required = ("SERVER", "WINDOW_CLASS_NAME", "WINDOW_NAME")
+        required = ("SERVER", "WINDOW_CLASS_NAME", "WINDOW_NAME", "SERVER_ASSETS")
         missing = [attr for attr in required if not hasattr(cls, attr)]
         if missing:
             raise TypeError(f"{cls.__name__} must define: {', '.join(missing)}")
@@ -64,6 +65,7 @@ class GameInterface(ABC):
             self.window = Window()
             self.window.findWindow(self.WINDOW_CLASS_NAME)
             self.window.forceFocus()
+            time.sleep(1)
 
         except RuntimeError:
             raise RuntimeError(
@@ -81,11 +83,15 @@ class GameInterface(ABC):
         return screenshot
 
     def cast_spell(self, gameRec: GameRectangle, hotkey: Input):
+        if hotkey.keyboard is None or hotkey.keyboard.key is None:
+            logger.error("None keyboard or key passed")
+            return
+
         screenshot = self._debug_capture(gameRec, f"spell_{hotkey.keyboard.key}")
         if is_hotkey_castable(screenshot):
             logger.info(f'Casting spell "{hotkey.keyboard.key}"')
             self.inputs.execute(self.inputs.TOGGLE_HORSE)
-            self.inputs.execute(hotkey)
+            self.inputs.execute(hotkey, 0.2)
             self.inputs.execute(self.inputs.TOGGLE_HORSE)
         else:
             logger.debug(f'Spell "{hotkey.keyboard.key}" unavailable')
@@ -167,22 +173,29 @@ class GameInterface(ABC):
 
     def captcha(self):
         trigger_window = self._debug_capture(self.ui.CAPTCHA_DETECT, "captcha-trigger")
-        if not find_template(
-            trigger_window, self.asset.get_group("nothyr").assets[0]
-        ):  # TODO - remove constant, also assets[0] is bad
+        template = self.asset.get_group(self.SERVER_ASSETS).assets[0]
+        if not isinstance(template, AssetImage):
+            logger.warning("Expected AssetImage, got %s", type(template))
+            return
+    
+        if not find_template(trigger_window, template, self.window.getScaleFactor()):
             logger.debug("Captcha window not detected")
             return
 
         logger.info("Captcha window detected")
         prompt = self._debug_capture(self.ui.CAPTCHA_PROMPT, "captcha-prompt")
         text = read_text(prompt)
+        if (text is None):
+            logger.error("Failed to read text from Captcha prompt")
+            return
+
         logger.info(f"Looking for {text}")
         item = text.split(" ")[1]
 
         challenge = self._debug_capture(self.ui.CAPTCHA_CHALLENGE, "captcha-challenge")
-        result = find_first(challenge, self.asset.get_group(item))
+        result = find_first(challenge, self.asset.get_group(item), self.window.getScaleFactor())
         if not result:
-            logger.info("Failed to solve Captcha")
+            logger.error("Failed to solve Captcha")
             return
 
         logger.info(f"Solution found")
@@ -193,13 +206,58 @@ class GameInterface(ABC):
         targetRect = self.window.gamerec_to_screenrec(self.ui.CAPTCHA_TARGET)
 
         self.inputs.click(itemPt, movement=MovementType.Bezier)
+        # self.inputs.move(targetRect.center, movement=MovementType.Bezier)
         self.inputs.click(targetRect.center, movement=MovementType.Bezier)
 
-    def biolog(self):
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+    def login(self):
+        trigger_window = self._debug_capture(self.ui.LOGIN_DETECT, "login-trigger")
+        template = self.asset.get_group(self.SERVER_ASSETS).assets[1]
 
-        self.inputs.click(self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP))
-        self.inputs.click(
-            self.window.gamept_to_screenpt(self.ui.BIOLOG_ORC_TOOTH), "right"
+        if not isinstance(template, AssetImage):
+            logger.warning("Expected AssetImage, got %s", type(template))
+            return
+    
+        if not find_template(trigger_window, template, self.window.getScaleFactor()):
+            logger.debug("Login window not detected")
+            return
+        
+        ch3_button = self.window.gamept_to_screenpt(self.ui.LOGIN_CH3)
+        self.inputs.click(ch3_button)
+        self.inputs.execute(self.inputs.LOGIN_1)
+        time.sleep(3)
+        self.inputs.execute(self.inputs.LOGIN_CONFIRM)
+
+    def respawn(self):
+        trigger_window = self._debug_capture(self.ui.RESPAWN_DETECT, "respawn-trigger")
+        template = self.asset.get_group(self.SERVER_ASSETS).assets[2]
+
+        if not isinstance(template, AssetImage):
+            logger.warning("Expected AssetImage, got %s", type(template))
+            return
+
+        result = find_template(trigger_window, template, self.window.getScaleFactor())
+        if not result:
+            logger.debug("Respawn window not detected")
+            return
+
+        logger.info("Respawn window detected")
+        x, y = result
+        windowCenter = ScreenPt(
+            trigger_window.origin_x + x + 1, trigger_window.origin_y + y + 1
         )
-        self.inputs.click(self.window.gamept_to_screenpt(self.ui.BIOLOG_CONFIRM))
+
+        self.inputs.click(windowCenter, movement=MovementType.Bezier)
+        
+    # def biolog(self):
+    #     self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY, 0.2)
+    #     shop = self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP)
+    #     self.inputs.click(shop, min_delay=0.2)
+
+    #     for item in self.ui.biolog_items:
+    #         itemPt = self.window.gamept_to_screenpt(item)
+    #         self.inputs.move(itemPt, min_delay=0.2)
+    #         okPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_OK)
+    #         self.inputs.click(okPt, min_delay=0.2)
+
+    #     confirmPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_CONFIRM)
+    #     self.inputs.click(confirmPt)

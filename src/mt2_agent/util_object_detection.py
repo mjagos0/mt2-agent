@@ -164,7 +164,7 @@ class ObjectDetector:
         self.yolo = YOLO(self.model_path)
 
     def detect(self, screenshot: Screenshot) -> DetectionResult:
-        results = self.yolo.predict(
+        results = self.yolo.predict(  # type: ignore[reportUnknownMemberType]
             source=screenshot.data,
             conf=self.confidence,
             verbose=False,
@@ -174,6 +174,8 @@ class ObjectDetector:
         by_label: dict[Label, list[Detection]] = {}
 
         for result in results:
+            if result.boxes is None:
+                continue
             for box in result.boxes:
                 label = YOLO_CLS_TO_LABEL.get(int(box.cls[0]))
                 if label is None:
