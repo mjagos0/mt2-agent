@@ -5,3 +5,4 @@ ultralytics
 interception-python
 pytweening
 bettercam
+pywin32
