@@ -83,13 +83,13 @@ def handle_args() -> argparse.Namespace:
     features.add_argument(
         "--auto-cast-interval",
         type=int,
-        default=1,
+        default=2,
         help="How often to cast spells off cooldown. 0 to disable",
     )
     features.add_argument(
         "--auto-pickup-interval",
         type=int,
-        default=1,
+        default=0,
         help="How often to pick up items from ground. 0 to disable",
     )
     features.add_argument(
