@@ -58,8 +58,8 @@ class Window:
             region = (
                 max(0, pt.x),
                 max(0, pt.y),
-                min(pt.x + round(width * self.getScaleFactor()), screen_w),
-                min(pt.y + round(height * self.getScaleFactor()), screen_h),
+                min(pt.x + width, screen_w),
+                min(pt.y + height, screen_h),
             )
 
         logger.debug(f"Capturing region {region}")
