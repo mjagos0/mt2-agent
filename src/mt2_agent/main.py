@@ -12,7 +12,6 @@ import heapq
 import shutil
 from dataclasses import dataclass, field
 from collections.abc import Callable
-from pathlib import Path
 
 PROG = "Metin2 Agent"
 USAGE = "..."
@@ -42,6 +41,9 @@ def main():
     else:
         logging.getLogger("mt2_agent").setLevel(logging.INFO)
 
+    # logging.getLogger("mt2_agent.window.window").setLevel(logging.WARNING)
+    # logging.getLogger("mt2_agent.window.screenshot").setLevel(logging.WARNING)
+
     input_overrides: dict[str, Input] = {}
     if args.rebind:
         for name, key in args.rebind:
@@ -54,90 +56,120 @@ def main():
 
 
 def handle_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(prog=PROG, usage=USAGE, description=DESCRIPTION)
+    p = argparse.ArgumentParser(
+        prog=PROG, usage=USAGE, description=DESCRIPTION,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
 
-    p.add_argument("server", type=str, choices=["Nothyr"], help="Name of Metin2 server")
+    server_settings = p.add_argument_group("Core settings")
+    features = p.add_argument_group("Features")
+    input_settings = p.add_argument_group("Input settings")
+    stuck_settings = p.add_argument_group("Stuck detection settings")
+    autotarget_settings = p.add_argument_group("Auto-target settings")
+    captcha_settings = p.add_argument_group("Captcha settings")
+    model_settings = p.add_argument_group("YOLO detection model settings")
+    developer_settings = p.add_argument_group("YOLO detection model settings")
+    assets_settings = p.add_argument_group("Assets settings")
 
-    # Input overrides
-    p.add_argument(
+    server_settings.add_argument("server", type=str, choices=["Nothyr"], help="Name of Metin2 server")
+    server_settings.add_argument(
+        "--duration",
+        type=int,
+        default=None,
+        help="Maximum duration of the agent's runtime in seconds",
+    )
+
+    # Features frequency
+    features.add_argument(
+        "--auto-cast-interval",
+        type=int,
+        default=1,
+        help="How often to cast spells off cooldown. 0 to disable",
+    )
+    features.add_argument(
+        "--auto-pickup-interval",
+        type=int,
+        default=1,
+        help="How often to pick up items from ground. 0 to disable",
+    )
+    features.add_argument(
+        "--auto-cape-interval",
+        type=int,
+        default=3,
+        help="How often to use the cape. 0 to disable",
+    )
+    features.add_argument(
+        "--unstuck-check-interval",
+        type=int,
+        default=5,
+        help="How often to check character coordinates",
+    )
+    features.add_argument(
+        "--auto-target-interval",
+        type=int,
+        default=3,
+        help="How often to detect targets",
+    )
+    features.add_argument(
+        "--captcha-check",
+        type=int,
+        default=3,
+        help="How often to check for captcha window",
+    )
+    features.add_argument(
+        "--respawn-check",
+        type=int,
+        default=5,
+        help="How often to check for respawn",
+    )
+    features.add_argument(
+        "--login-check",
+        type=int,
+        default=5,
+        help="How often to check for login screen",
+    )
+    features.add_argument(
+        "--biolog",
+        type=int,
+        default=0,
+        help="How often to try to hand in biolog items",
+    )
+
+    # Input settings
+    input_settings.add_argument(
         "--rebind",
         nargs=2,
         action="append",
         metavar=("NAME", "KEY"),
         help="Rebind a hotkey, e.g. --rebind HOTKEY_1 q --rebind PICKUP_ITEMS x",
     )
-    p.add_argument(
+    input_settings.add_argument(
         "--input-delay",
         type=float,
         default = 0.06,
-        help="Average delay between agent inputs (i.e. delay between moving a mouse and pressing a left click)"
-    )
-
-    p.add_argument(
-        "--duration",
-        type=int,
-        default=None,
-        help="Duration of the run / agents execution in seconds",
-    )
-
-    # Features frequency
-    p.add_argument(
-        "--auto-cast-interval",
-        type=int,
-        default=1,
-        help="How often to cast spells off cooldown. 0 to disable",
-    )
-    p.add_argument(
-        "--auto-pickup-interval",
-        type=int,
-        default=1,
-        help="How often to pick up items from ground. 0 to disable",
-    )
-    p.add_argument(
-        "--auto-cape-interval",
-        type=int,
-        default=3,
-        help="How often to use the cape. 0 to disable",
-    )
-    p.add_argument(
-        "--unstuck-check-interval",
-        type=int,
-        default=5,
-        help="How often to check character coordinates",
-    )
-    p.add_argument(
-        "--auto-target-interval",
-        type=int,
-        default=3,
-        help="How often to detect targets",
-    )
-    p.add_argument(
-        "--captcha-check",
-        type=int,
-        default=3,
-        help="How often to check for captcha window",
+        help="Average delay between agent inputs"
     )
 
     # Stuck detection
-    p.add_argument(
+    stuck_settings.add_argument(
         "--unstuck-threshold",
         type=int,
         default=60,
         help="Number of seconds to remain in the same place to execute unstuck procedure",
     )
-    p.add_argument(
+    stuck_settings.add_argument(
         "--unstuck-clicks",
         type=int,
         default=30,
         help="Number of clicks during unstuck procedure",
     )
-    p.add_argument(
+    stuck_settings.add_argument(
         "--unstuck-interval",
         type=float,
         default=0.1,
         help="Duration between clicks during unstuck procedure",
     )
-    p.add_argument(
+    stuck_settings.add_argument(
         "--unstuck-center-radius",
         type=float,
         default=0.65,
@@ -145,25 +177,25 @@ def handle_args() -> argparse.Namespace:
     )
 
     # Auto target
-    p.add_argument(
+    autotarget_settings.add_argument(
         "--target-boss",
         type=int,
         default=0,
         help="Auto target boss priority. 0 for off.",
     )
-    p.add_argument(
+    autotarget_settings.add_argument(
         "--target-boulder",
         type=int,
         default=3,
         help="Auto target boulder priority. 0 for off.",
     )
-    p.add_argument(
+    autotarget_settings.add_argument(
         "--target-enemy",
         type=int,
         default=0,
         help="Auto target enemy priority. 0 for off.",
     )
-    p.add_argument(
+    autotarget_settings.add_argument(
         "--target-random",
         type=int,
         default=0,
@@ -171,7 +203,7 @@ def handle_args() -> argparse.Namespace:
     )
 
     # Captcha
-    p.add_argument(
+    captcha_settings.add_argument(
         "--captcha-trigger-template-path",
         type=str,
         default="assets/nothyr/captcha-detect.png",
@@ -179,13 +211,13 @@ def handle_args() -> argparse.Namespace:
     )
 
     # Detection model
-    p.add_argument(
+    model_settings.add_argument(
         "--obj-model-path",
         type=str,
         default="assets/model/best.pt",
         help="Path to YOLOv11 model weights",
     )
-    p.add_argument(
+    model_settings.add_argument(
         "--obj-model-confidence-cutoff",
         type=float,
         default=0.3,
@@ -193,26 +225,25 @@ def handle_args() -> argparse.Namespace:
     )
 
     # Assets
-    p.add_argument(
+    assets_settings.add_argument(
         "--asset-icon-dir",
         type=str,
         default="assets/icons",
         help="Path to folder with game icons",
     )
 
-    # Screenshots
-    p.add_argument(
+    assets_settings.add_argument(
         "--screenshot-path",
         default=DEFAULT_SCREENSHOT_PATH,
         help="Redefine relative screenshot path",
     )
 
     # Developer
-    p.add_argument("--debug", action="store_true", help="Show developer logs")
-    p.add_argument(
+    developer_settings.add_argument("--debug", action="store_true", help="Show developer logs")
+    developer_settings.add_argument(
         "--debug-folder", default="debug", help="Developer folder for debugging"
     )
-    p.add_argument(
+    developer_settings.add_argument(
         "--debug-folder-screenshots",
         default="debug",
         help="Developer folder for debug screenshots",
@@ -275,14 +306,14 @@ class MetinAgent:
             None if args.duration is None else time.monotonic() + args.duration
         )
 
-    def _schedule(self, name: str, action_fn: Callable[[], None], interval: float):
+    def _schedule(self, name: str, action_fn: Callable[[], None], interval: float, initial_delay: float = 0):
         if interval == 0:
             logger.info(f"{name} not scheduled")
             return
         else:
-            logger.info(f"{name} scheduled to run every {interval}s")
+            logger.info(f"{name} scheduled to run every {interval}s (first run in {initial_delay}s)")
             task = ScheduledTask(
-                next_run=time.monotonic(),
+                next_run=time.monotonic() + initial_delay,
                 name=name,
                 action_fn=action_fn,
                 interval=interval,
@@ -290,6 +321,12 @@ class MetinAgent:
             heapq.heappush(self._heap, task)
 
     def run(self):
+        # from .game_input import MovementType
+        # self.game.inputs.move(
+        #     self.game.window.screenPt(0, 0),
+        #     MovementType.Instant
+        # )
+        # return
         # self.game.window.capture(self.game.ui.HOTKEY_F1).save(Path("HOTKEY_F1.png"))
         # self.game.window.capture(self.game.ui.HOTKEY_F2).save(Path("HOTKEY_F2.png"))
         # self.game.window.capture(self.game.ui.HOTKEY_F3).save(Path("HOTKEY_F3.png"))
@@ -303,13 +340,13 @@ class MetinAgent:
         # self.game.pickup_items()
         # return
         # Register all periodic tasks
-        self._schedule("login", self.game.login, 5)
-        self._schedule("respawn", self.game.respawn, 5)
+        self._schedule("login", self.game.login, self.args.login_check)
+        self._schedule("respawn", self.game.respawn, self.args.respawn_check)
         self._schedule("auto-cast", self.game.cast_spells, self.args.auto_cast_interval)
         self._schedule(
             "auto-pickup", self.game.pickup_items, self.args.auto_pickup_interval
         )
-        # self._schedule("auto-cape", self.game.bravery_cape, self.args.auto_cape_interval)
+        self._schedule("auto-cape", self.game.bravery_cape, 5)
         self._schedule(
             "stuck-detection",
             self.game.stuck_detection,
@@ -319,23 +356,24 @@ class MetinAgent:
             "auto-target", self.game.auto_target, self.args.auto_target_interval
         )
         self._schedule("captcha", self.game.captcha, self.args.captcha_check)
-        # self._schedule("biolog", self.game.biolog, 5)
+        self._schedule("biolog", self.game.biolog, self.args.biolog, 30)
         
 
         while self._should_run():
-            self.assertWindowAlive()
-            self.assertWindowFocused()
-
-            if not self._agent_active:
-                time.sleep(0.1)
-                continue
-
             # Peek at the earliest task — O(1)
             task = self._heap[0]
 
             sleep_for = task.next_run - time.monotonic()
             if sleep_for > 0:
                 time.sleep(sleep_for)
+
+            # Ensure agent is active
+            self.assertWindowAlive()
+            self.assertWindowFocused()
+
+            if not self._agent_active:
+                time.sleep(0.1)
+                continue
 
             # Pop and execute
             task = heapq.heappop(self._heap)

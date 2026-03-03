@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 import interception
-from interception import beziercurve, MouseButton
-import pytweening # type: ignore[import-untyped]
-from typing import cast, Any
+from interception import MouseButton
+import pytweening  # type: ignore[import-untyped]
 
 import math
 import random
@@ -19,15 +19,136 @@ class MovementType(Enum):
     Bezier = 3
 
 
-LINEAR_PARAMS = beziercurve.BezierCurveParams(
+# ---------------------------------------------------------------------------
+# Custom point-interpolation helpers
+# ---------------------------------------------------------------------------
+# These replace interception's built-in bezier/linear movement so that we
+# only ever call `interception.move_to(x, y)` (the instant warp), which does
+# NOT activate the Windows "enhance pointer precision" setting.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CurveParams:
+    """Parameters that control human-like mouse curves."""
+
+    # Number of random internal control points (knots) for bezier curves.
+    # 0 = straight line with only tweening applied.
+    knots: int = 2
+
+    # How far (in pixels) knots may deviate from the straight line.
+    distortion_mean: float = 1.0
+    distortion_stdev: float = 1.0
+    distortion_frequency: float = 0.5
+
+    # Tweening function applied to the parametric t ∈ [0, 1].
+    tween: Any = pytweening.easeOutQuad
+
+    # How many discrete steps the curve is split into.
+    target_points: int = 80
+
+    # Base seconds between each step (randomised a bit).
+    step_delay: float = 0.002
+
+
+LINEAR_CURVE = CurveParams(
     knots=0,
     distortion_mean=0,
     distortion_stdev=0,
     distortion_frequency=0,
-    tween=cast(Any, pytweening.linear),
+    tween=pytweening.linear,
     target_points=100,
+    step_delay=0.002,
 )
-BEZIER_PARAMS = beziercurve.BezierCurveParams()
+
+BEZIER_CURVE = CurveParams()
+
+
+def _bernstein_basis(n: int, i: int, t: float) -> float:
+    """Bernstein basis polynomial B_{i,n}(t)."""
+    return math.comb(n, i) * (t ** i) * ((1 - t) ** (n - i))
+
+
+def _evaluate_bezier(control_points: list[tuple[float, float]], t: float) -> tuple[float, float]:
+    """Evaluate a bezier curve defined by *control_points* at parameter *t*."""
+    n = len(control_points) - 1
+    x = sum(_bernstein_basis(n, i, t) * p[0] for i, p in enumerate(control_points))
+    y = sum(_bernstein_basis(n, i, t) * p[1] for i, p in enumerate(control_points))
+    return (x, y)
+
+
+def _generate_internal_knots(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    params: CurveParams,
+) -> list[tuple[float, float]]:
+    """Generate random internal knots between *start* and *end*."""
+    if params.knots <= 0:
+        return []
+
+    knots: list[tuple[float, float]] = []
+    for i in range(1, params.knots + 1):
+        frac = i / (params.knots + 1)
+        mid_x = start[0] + (end[0] - start[0]) * frac
+        mid_y = start[1] + (end[1] - start[1]) * frac
+
+        if params.distortion_mean > 0 or params.distortion_stdev > 0:
+            if random.random() < params.distortion_frequency:
+                offset_x = random.gauss(0, params.distortion_mean + params.distortion_stdev)
+                offset_y = random.gauss(0, params.distortion_mean + params.distortion_stdev)
+                mid_x += offset_x
+                mid_y += offset_y
+
+        knots.append((mid_x, mid_y))
+    return knots
+
+
+def generate_curve_points(
+    from_pt: tuple[float, float],
+    to_pt: tuple[float, float],
+    params: CurveParams,
+) -> list[tuple[int, int]]:
+    """
+    Return a list of integer (x, y) screen coordinates tracing a curve from
+    *from_pt* to *to_pt* according to *params*.
+
+    The tweening function is applied to the parametric variable so that
+    acceleration / deceleration is baked into the spacing of points.
+    """
+    control_points: list[tuple[float, float]] = [
+        from_pt,
+        *_generate_internal_knots(from_pt, to_pt, params),
+        to_pt,
+    ]
+
+    n_steps = max(params.target_points, 2)
+    points: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set()
+
+    for step in range(n_steps + 1):
+        raw_t = step / n_steps
+        t = params.tween(raw_t) if params.tween else raw_t
+        t = max(0.0, min(1.0, t))
+
+        fx, fy = _evaluate_bezier(control_points, t)
+        pt = (int(round(fx)), int(round(fy)))
+
+        # Deduplicate consecutive identical pixel positions.
+        if pt not in seen:
+            points.append(pt)
+            seen.add(pt)
+
+    # Always ensure we end exactly on the target.
+    target = (int(round(to_pt[0])), int(round(to_pt[1])))
+    if not points or points[-1] != target:
+        points.append(target)
+
+    return points
+
+
+# ---------------------------------------------------------------------------
+# Dataclasses for input abstraction
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -65,15 +186,22 @@ class Input:
     keyboard: KeyboardInput | None = None
 
 
+# ---------------------------------------------------------------------------
+# Main GameInputs controller
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class GameInputs:
-    _min_action_delay: float = field(default=0.04, init=False)
-    _delay_spread: float = field(default=0.02, init=False)
+    _min_action_delay: float = field(default=0.08, init=False)
+    _delay_spread: float = field(default=0.03, init=False)
     _delay_sigma: float = field(default=0.5, init=False)
 
     _last_action_time: float = field(default=0.0, init=False)
 
-    ESCAPE = FunctionKey("esc")
+    # We track the last position ourselves since interception has no getter.
+    _last_mouse_pos: tuple[int, int] = field(default=(0, 0), init=False)
+
     CTRL = FunctionKey("ctrl")
     SHIFT = FunctionKey("shift")
     CLICK_LEFT = Click("left")
@@ -104,6 +232,7 @@ class GameInputs:
     # Nothyr
     DROP_METIN_QUEUE: Input = Input()
     OPEN_BIOLOG_KEY: Input = Input()
+    CLOSE_WINDOW: Input = Input(keyboard=KeyboardInput("esc"))
 
     @property
     def hotkeys(self) -> list[Input]:
@@ -117,6 +246,10 @@ class GameInputs:
             self.HOTKEY_F3,
             self.HOTKEY_F4,
         ]
+
+    # -----------------------------------------------------------------------
+    # Delay / cooldown helpers
+    # -----------------------------------------------------------------------
 
     def _random_delay(self, min_delay: float | None = None) -> float:
         gamma = min_delay if min_delay is not None else self._min_action_delay
@@ -137,6 +270,10 @@ class GameInputs:
         if remaining > 0:
             time.sleep(remaining)
         self._last_action_time = time.monotonic()
+
+    # -----------------------------------------------------------------------
+    # Public convenience methods
+    # -----------------------------------------------------------------------
 
     def click(
         self,
@@ -173,15 +310,38 @@ class GameInputs:
             min_delay=min_delay,
         )
 
+    # -----------------------------------------------------------------------
+    # Mouse movement – always uses instant move_to under the hood
+    # -----------------------------------------------------------------------
+
     def _move_mouse(self, position: Position):
         x, y = position.coordinates.as_tuple()
+
         match position.movementType:
             case MovementType.Instant:
                 interception.move_to(x, y)
             case MovementType.Linear:
-                interception.move_to(x, y, LINEAR_PARAMS)
+                self._interpolated_move(x, y, LINEAR_CURVE)
             case MovementType.Bezier:
-                interception.move_to(x, y, BEZIER_PARAMS)
+                self._interpolated_move(x, y, BEZIER_CURVE)
+
+        self._last_mouse_pos = (x, y)
+
+    def _interpolated_move(self, target_x: int, target_y: int, params: CurveParams):
+        from_pt = (float(self._last_mouse_pos[0]), float(self._last_mouse_pos[1]))
+        to_pt = (float(target_x), float(target_y))
+
+        points = generate_curve_points(from_pt, to_pt, params)
+
+        for px, py in points:
+            interception.move_to(px, py)
+            # Small random jitter on the delay keeps the movement organic.
+            jitter = random.uniform(0.5, 1.5)
+            time.sleep(params.step_delay * jitter)
+
+    # -----------------------------------------------------------------------
+    # Keyboard helpers
+    # -----------------------------------------------------------------------
 
     def _press_with_modifier(self, key: str, fc_key: FunctionKey | None):
         if fc_key:
@@ -189,6 +349,10 @@ class GameInputs:
         interception.press(key)
         if fc_key:
             interception.key_up(fc_key.key)
+
+    # -----------------------------------------------------------------------
+    # Main execute entry-point
+    # -----------------------------------------------------------------------
 
     def execute(
         self,

@@ -76,40 +76,43 @@ class GameUI:
     CAPTCHA_TARGET: GameRectangle = GameRectangle(_C, (82.5, 56.5), (33, 34))
 
     # Login
-    LOGIN_DETECT: GameRectangle = GameRectangle(_C, (-72.5, 165), (146, 50))
-    LOGIN_CH3: GamePt = GamePt(_C, (144.5, -5))
+    LOGIN_DETECT: GameRectangle = GameRectangle(_BC, (-73.5, -133), (146, 48))
+    LOGIN_CH3: GamePt = GamePt(_BC, (144.5, -304))
 
     # Respawn
     RESPAWN_DETECT: GameRectangle = GameRectangle(NAMED_ANCHORS["top-left"], (52, 59), (195, 40))
     
     # Biolog
+    _23 = (2/3, 0.0)
+
     BIOLOG_SHOP: GamePt = GamePt(_C, (102, -69.5))
     BIOLOG_CONFIRM: GamePt = GamePt(_C, (15.5, -114.5))
     BIOLOG_OK: GamePt = GamePt(_C, (1.5, 20))
+    BIOLOG_SHOP_EXIT: GameRectangle = GameRectangle((0.6421, 0.0), (366.75, 209), (16, 17))
 
     # Row 0
-    BIOLOG_0_0 = GamePt(_BR, (-353.5, -552.5))
-    BIOLOG_1_0 = GamePt(_BR, (-321.5, -552.5))
-    BIOLOG_2_0 = GamePt(_BR, (-289.5, -552.5))
-    BIOLOG_3_0 = GamePt(_BR, (-257.5, -552.5))
-    BIOLOG_4_0 = GamePt(_BR, (-225.5, -552.5))
+    BIOLOG_0_0 = GameRectangle(_23, (180.33, 233), (31, 31))
+    BIOLOG_1_0 = GameRectangle(_23, (212.33, 233), (31, 31))
+    BIOLOG_2_0 = GameRectangle(_23, (244.33, 233), (31, 31))
+    BIOLOG_3_0 = GameRectangle(_23, (276.33, 233), (31, 31))
+    BIOLOG_4_0 = GameRectangle(_23, (308.33, 233), (31, 31))
 
     # Row 1
-    BIOLOG_0_1 = GamePt(_BR, (-353.5, -520.5))
-    BIOLOG_1_1 = GamePt(_BR, (-321.5, -520.5))
-    BIOLOG_2_1 = GamePt(_BR, (-289.5, -520.5))
-    BIOLOG_3_1 = GamePt(_BR, (-257.5, -520.5))
-    BIOLOG_4_1 = GamePt(_BR, (-225.5, -520.5))
+    BIOLOG_0_1 = GameRectangle(_23, (180.33, 265), (31, 31))
+    BIOLOG_1_1 = GameRectangle(_23, (212.33, 265), (31, 31))
+    BIOLOG_2_1 = GameRectangle(_23, (244.33, 265), (31, 31))
+    BIOLOG_3_1 = GameRectangle(_23, (276.33, 265), (31, 31))
+    BIOLOG_4_1 = GameRectangle(_23, (308.33, 265), (31, 31))
 
     # Row 2
-    BIOLOG_0_2 = GamePt(_BR, (-353.5, -488.5))
-    BIOLOG_1_2 = GamePt(_BR, (-321.5, -488.5))
-    BIOLOG_2_2 = GamePt(_BR, (-289.5, -488.5))
-    BIOLOG_3_2 = GamePt(_BR, (-257.5, -488.5))
-    BIOLOG_4_2 = GamePt(_BR, (-225.5, -488.5))
+    BIOLOG_0_2 = GameRectangle(_23, (180.33, 297), (31, 31))
+    BIOLOG_1_2 = GameRectangle(_23, (212.33, 297), (31, 31))
+    BIOLOG_2_2 = GameRectangle(_23, (244.33, 297), (31, 31))
+    BIOLOG_3_2 = GameRectangle(_23, (276.33, 297), (31, 31))
+    BIOLOG_4_2 = GameRectangle(_23, (308.33, 297), (31, 31))
 
     @property
-    def biolog_items(self) -> list[GamePt]:
+    def biolog_items(self) -> list[GameRectangle]:
         return [
             self.BIOLOG_0_0, self.BIOLOG_1_0, self.BIOLOG_2_0, self.BIOLOG_3_0, self.BIOLOG_4_0,
             self.BIOLOG_0_1, self.BIOLOG_1_1, self.BIOLOG_2_1, self.BIOLOG_3_1, self.BIOLOG_4_1,

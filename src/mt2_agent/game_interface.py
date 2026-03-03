@@ -14,9 +14,11 @@ from typing import Any
 import argparse
 import time
 import logging
+import cv2
 from pathlib import Path
 from datetime import datetime
 import inspect
+import difflib
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +172,17 @@ class GameInterface(ABC):
             self.inputs.click(center)
         else:
             raise RuntimeError(f'Unknown object type "{obj.label}"')
+        
+    def _fuzzy_match_group(self, item: str) -> str:
+        """Match OCR text to closest asset group name."""
+        groups = list(self.asset.groups.keys())
+        matches = difflib.get_close_matches(item, groups, n=1, cutoff=0.5)
+        if matches:
+            if matches[0] != item:
+                logger.info(f"Fuzzy matched '{item}' -> '{matches[0]}'")
+            return matches[0]
+        logger.warning(f"No close match for '{item}' in {groups}")
+        return item
 
     def captcha(self):
         trigger_window = self._debug_capture(self.ui.CAPTCHA_DETECT, "captcha-trigger")
@@ -190,7 +203,7 @@ class GameInterface(ABC):
             return
 
         logger.info(f"Looking for {text}")
-        item = text.split(" ")[1]
+        item = self._fuzzy_match_group(text.split(" ")[1])
 
         challenge = self._debug_capture(self.ui.CAPTCHA_CHALLENGE, "captcha-challenge")
         result = find_first(challenge, self.asset.get_group(item), self.window.getScaleFactor())
@@ -205,9 +218,25 @@ class GameInterface(ABC):
         )  # TODO: Not good
         targetRect = self.window.gamerec_to_screenrec(self.ui.CAPTCHA_TARGET)
 
-        self.inputs.click(itemPt, movement=MovementType.Bezier)
-        # self.inputs.move(targetRect.center, movement=MovementType.Bezier)
-        self.inputs.click(targetRect.center, movement=MovementType.Bezier)
+        self.inputs.click(itemPt, movement=MovementType.Bezier, min_delay=0.2)
+        self.inputs.click(targetRect.center, movement=MovementType.Bezier, min_delay=1.0)
+        # self.inputs.click(targetRect.center, movement=MovementType.Bezier, min_delay=0.2)
+
+        if self.args.debug:
+            matched_asset = result[0]
+            scale = self.window.getScaleFactor()
+            th, tw = matched_asset.image.shape[:2]
+            tw, th = int(tw * scale), int(th * scale)
+            debug_img = challenge.data.copy()
+            top_left = (x - tw // 2, y - th // 2)
+            bottom_right = (x + tw // 2, y + th // 2)
+            cv2.rectangle(debug_img, top_left, bottom_right, (0, 255, 0), 2)
+            cv2.circle(debug_img, (x, y), 4, (0, 0, 255), -1)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            folder = Path(self.args.debug_folder_screenshots, "captcha")
+            folder.mkdir(parents=True, exist_ok=True)
+            debug_screenshot = Screenshot(data=debug_img, origin_x=challenge.origin_x, origin_y=challenge.origin_y)
+            debug_screenshot.save(folder / f"{ts}_captcha-solution_{item}.png")
 
     def login(self):
         trigger_window = self._debug_capture(self.ui.LOGIN_DETECT, "login-trigger")
@@ -224,8 +253,9 @@ class GameInterface(ABC):
         ch3_button = self.window.gamept_to_screenpt(self.ui.LOGIN_CH3)
         self.inputs.click(ch3_button)
         self.inputs.execute(self.inputs.LOGIN_1)
-        time.sleep(3)
+        time.sleep(5)
         self.inputs.execute(self.inputs.LOGIN_CONFIRM)
+        time.sleep(5)
 
     def respawn(self):
         trigger_window = self._debug_capture(self.ui.RESPAWN_DETECT, "respawn-trigger")
@@ -247,17 +277,40 @@ class GameInterface(ABC):
         )
 
         self.inputs.click(windowCenter, movement=MovementType.Bezier)
+        self.inputs.execute(self.inputs.TOGGLE_HORSE)
         
-    # def biolog(self):
-    #     self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY, 0.2)
-    #     shop = self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP)
-    #     self.inputs.click(shop, min_delay=0.2)
+    def biolog(self):
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        shop = self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP)
+        self.inputs.click(shop)
 
-    #     for item in self.ui.biolog_items:
-    #         itemPt = self.window.gamept_to_screenpt(item)
-    #         self.inputs.move(itemPt, min_delay=0.2)
-    #         okPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_OK)
-    #         self.inputs.click(okPt, min_delay=0.2)
+        for item in self.ui.biolog_items:
+            for _ in range(3):
+                itemRect = self.window.gamerec_to_screenrec(item)
+                self.inputs.click(itemRect.center, "right", min_delay=0.03)
+                okPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_OK)
+                self.inputs.click(okPt, "left", min_delay=0.03)
 
-    #     confirmPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_CONFIRM)
-    #     self.inputs.click(confirmPt)
+        itemRect = self.window.gamerec_to_screenrec(self.ui.biolog_items[0])
+        self.inputs.click(itemRect.center, "left", min_delay=0.05)
+        self.inputs.click(itemRect.center, "left", min_delay=0.05)
+        self.inputs.execute(self.inputs.CLOSE_WINDOW)
+
+        shopExit = self.window.gamerec_to_screenrec(self.ui.BIOLOG_SHOP_EXIT)
+        self.inputs.click(shopExit.center, "left")
+        confirmPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_CONFIRM)
+        self.inputs.click(confirmPt, min_delay=0.2)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.click(confirmPt, min_delay=0.2)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.click(confirmPt, min_delay=0.2)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.click(confirmPt, min_delay=0.2)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.click(confirmPt, min_delay=0.2)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        self.inputs.execute(self.inputs.CLOSE_WINDOW)
