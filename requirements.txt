@@ -2,6 +2,6 @@ opencv-python
 numpy
 pytesseract
 ultralytics
-interception
+interception-python
 pytweening
 bettercam
