@@ -23,7 +23,7 @@ user32 = ctypes.windll.user32  # type: ignore[attr-defined]
 INPUT_MOUSE = 0
 INPUT_KEYBOARD = 1
 
-# Keyboard event flags
+# Keyboard event flags (for SendInput — used only as fallback reference)
 KEYEVENTF_SCANCODE = 0x0008
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_EXTENDEDKEY = 0x0001
@@ -38,9 +38,17 @@ MOUSEEVENTF_MIDDLEDOWN = 0x0020
 MOUSEEVENTF_MIDDLEUP = 0x0040
 MOUSEEVENTF_ABSOLUTE = 0x8000
 
-# Screen metrics for absolute mouse coordinates (0-65535 range)
+# Screen metrics
 SM_CXSCREEN = 0
 SM_CYSCREEN = 1
+
+# Window messages for keyboard
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+
+# MapVirtualKeyW mapping type: scan code -> virtual key
+MAPVK_VSC_TO_VK = 1
+MAPVK_VSC_TO_VK_EX = 3
 
 
 class MOUSEINPUT(ctypes.Structure):
@@ -90,9 +98,6 @@ class INPUT(ctypes.Structure):
 # ---------------------------------------------------------------------------
 # Scan-code lookup table  (Set 1 / AT scan codes)
 # ---------------------------------------------------------------------------
-# Extended keys (those prefixed with 0xE0 on the PS/2 wire) have the
-# ``extended`` flag set to True; SendInput needs KEYEVENTF_EXTENDEDKEY for
-# them.
 
 _SCAN_CODES: dict[str, tuple[int, bool]] = {
     # Number row
@@ -145,15 +150,15 @@ _SCAN_CODES: dict[str, tuple[int, bool]] = {
     "backspace": (0x0E, False),
 
     # Modifiers
-    "shift": (0x2A, False),       # Left Shift
+    "shift": (0x2A, False),
     "lshift": (0x2A, False),
     "rshift": (0x36, False),
-    "ctrl": (0x1D, False),        # Left Ctrl
+    "ctrl": (0x1D, False),
     "lctrl": (0x1D, False),
-    "rctrl": (0x1D, True),        # Right Ctrl is extended
-    "alt": (0x38, False),         # Left Alt
+    "rctrl": (0x1D, True),
+    "alt": (0x38, False),
     "lalt": (0x38, False),
-    "ralt": (0x38, True),         # Right Alt is extended
+    "ralt": (0x38, True),
 
     # Function keys
     "f1": (0x3B, False),
@@ -185,36 +190,6 @@ _SCAN_CODES: dict[str, tuple[int, bool]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Low-level SendInput helpers
-# ---------------------------------------------------------------------------
-
-def _send_inputs(*inputs: INPUT) -> int:
-    """Send one or more INPUT structures via SendInput."""
-    arr = (INPUT * len(inputs))(*inputs)
-    return user32.SendInput(len(arr), arr, ctypes.sizeof(INPUT))
-
-
-def _make_key_input(scan_code: int, extended: bool, key_up: bool) -> INPUT:
-    """Create a keyboard INPUT struct using a hardware scan code."""
-    flags = KEYEVENTF_SCANCODE
-    if extended:
-        flags |= KEYEVENTF_EXTENDEDKEY
-    if key_up:
-        flags |= KEYEVENTF_KEYUP
-
-    ki = KEYBDINPUT(
-        wVk=0,
-        wScan=scan_code,
-        dwFlags=flags,
-        time=0,
-        dwExtraInfo=ctypes.pointer(ctypes.c_ulong(0)),
-    )
-    inp = INPUT(type=INPUT_KEYBOARD)
-    inp.union.ki = ki
-    return inp
-
-
 def _resolve_scan(key: str) -> tuple[int, bool]:
     """Look up the scan code and extended flag for a key name."""
     lower = key.lower()
@@ -223,29 +198,16 @@ def _resolve_scan(key: str) -> tuple[int, bool]:
     return _SCAN_CODES[lower]
 
 
-def key_down(key: str) -> None:
-    """Send a key-down event for *key* using its hardware scan code."""
-    scan, ext = _resolve_scan(key)
-    _send_inputs(_make_key_input(scan, ext, key_up=False))
+# ---------------------------------------------------------------------------
+# Mouse helpers (SendInput – works fine, games don't filter mouse)
+# ---------------------------------------------------------------------------
 
-
-def key_up(key: str) -> None:
-    """Send a key-up event for *key* using its hardware scan code."""
-    scan, ext = _resolve_scan(key)
-    _send_inputs(_make_key_input(scan, ext, key_up=True))
-
-
-def press(key: str) -> None:
-    """Full key press (down + up) in a single SendInput call."""
-    scan, ext = _resolve_scan(key)
-    _send_inputs(
-        _make_key_input(scan, ext, key_up=False),
-        _make_key_input(scan, ext, key_up=True),
-    )
+def _send_inputs(*inputs: INPUT) -> int:
+    arr = (INPUT * len(inputs))(*inputs)
+    return user32.SendInput(len(arr), arr, ctypes.sizeof(INPUT))
 
 
 def _screen_size() -> tuple[int, int]:
-    """Return the primary monitor resolution in pixels."""
     return (
         user32.GetSystemMetrics(SM_CXSCREEN),
         user32.GetSystemMetrics(SM_CYSCREEN),
@@ -253,11 +215,8 @@ def _screen_size() -> tuple[int, int]:
 
 
 def move_to(x: int, y: int) -> None:
-    """Move the mouse cursor to absolute screen pixel coordinates (*x*, *y*)."""
+    """Move the mouse cursor to absolute screen pixel coordinates."""
     cx, cy = _screen_size()
-    # SendInput MOUSEEVENTF_ABSOLUTE uses a 0–65535 normalised coordinate
-    # space.  The +1 on the denominator avoids the cursor being 1px short
-    # of the bottom/right edge (standard workaround).
     abs_x = int(x * 65536 / cx)
     abs_y = int(y * 65536 / cy)
 
@@ -274,17 +233,14 @@ def move_to(x: int, y: int) -> None:
     _send_inputs(inp)
 
 
-def click(button: str = "left") -> None:
-    """Click (press + release) a mouse button at the current cursor position."""
+def mouse_click(button: str = "left") -> None:
+    """Click a mouse button at the current cursor position via SendInput."""
     if button == "left":
-        down_flag = MOUSEEVENTF_LEFTDOWN
-        up_flag = MOUSEEVENTF_LEFTUP
+        down_flag, up_flag = MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP
     elif button == "right":
-        down_flag = MOUSEEVENTF_RIGHTDOWN
-        up_flag = MOUSEEVENTF_RIGHTUP
+        down_flag, up_flag = MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP
     elif button == "middle":
-        down_flag = MOUSEEVENTF_MIDDLEDOWN
-        up_flag = MOUSEEVENTF_MIDDLEUP
+        down_flag, up_flag = MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP
     else:
         raise ValueError(f"Unsupported mouse button: {button!r}")
 
@@ -304,6 +260,65 @@ def click(button: str = "left") -> None:
 
 
 # ---------------------------------------------------------------------------
+# Keyboard helpers (PostMessage – no LLKHF_INJECTED flag)
+# ---------------------------------------------------------------------------
+# WM_KEYDOWN / WM_KEYUP lParam layout:
+#   Bits  0-15 : repeat count (1)
+#   Bits 16-23 : scan code
+#   Bit  24    : extended key flag
+#   Bits 25-28 : reserved (0)
+#   Bit  29    : context code (0 for WM_KEYDOWN/UP)
+#   Bit  30    : previous key state (0 = was up for DOWN, 1 = was down for UP)
+#   Bit  31    : transition state (0 = being pressed, 1 = being released)
+# ---------------------------------------------------------------------------
+
+def _make_lparam(scan_code: int, extended: bool, key_up: bool) -> int:
+    """Build the lParam for WM_KEYDOWN / WM_KEYUP."""
+    lparam = 1  # repeat count = 1
+    lparam |= (scan_code & 0xFF) << 16
+    if extended:
+        lparam |= 1 << 24
+    if key_up:
+        lparam |= 1 << 30  # previous key state = was down
+        lparam |= 1 << 31  # transition state = being released
+    return lparam
+
+
+def _scan_to_vk(scan_code: int, extended: bool) -> int:
+    """Convert a scan code to a virtual key code via MapVirtualKeyW."""
+    # For extended keys, use MAPVK_VSC_TO_VK_EX which distinguishes
+    # e.g. left ctrl vs right ctrl.
+    map_type = MAPVK_VSC_TO_VK_EX if extended else MAPVK_VSC_TO_VK
+    vk = user32.MapVirtualKeyW(scan_code, map_type)
+    return vk
+
+
+def _post_key(hwnd: ctypes.wintypes.HWND, scan_code: int, extended: bool, key_up: bool) -> None:
+    """Post a single WM_KEYDOWN or WM_KEYUP to the target window."""
+    vk = _scan_to_vk(scan_code, extended)
+    msg = WM_KEYUP if key_up else WM_KEYDOWN
+    lparam = _make_lparam(scan_code, extended, key_up)
+    user32.PostMessageW(hwnd, msg, vk, lparam)
+
+
+def post_key_down(hwnd: ctypes.wintypes.HWND, key: str) -> None:
+    scan, ext = _resolve_scan(key)
+    _post_key(hwnd, scan, ext, key_up=False)
+
+
+def post_key_up(hwnd: ctypes.wintypes.HWND, key: str) -> None:
+    scan, ext = _resolve_scan(key)
+    _post_key(hwnd, scan, ext, key_up=True)
+
+
+def post_press(hwnd: ctypes.wintypes.HWND, key: str) -> None:
+    """Full key press: WM_KEYDOWN then WM_KEYUP."""
+    scan, ext = _resolve_scan(key)
+    _post_key(hwnd, scan, ext, key_up=False)
+    _post_key(hwnd, scan, ext, key_up=True)
+
+
+# ---------------------------------------------------------------------------
 # Type alias replacing interception.MouseButton
 # ---------------------------------------------------------------------------
 
@@ -319,32 +334,17 @@ class MovementType(Enum):
 # ---------------------------------------------------------------------------
 # Custom point-interpolation helpers
 # ---------------------------------------------------------------------------
-# These replace interception's built-in bezier/linear movement so that we
-# only ever call `move_to(x, y)` (the instant warp), which does
-# NOT activate the Windows "enhance pointer precision" setting.
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class CurveParams:
     """Parameters that control human-like mouse curves."""
-
-    # Number of random internal control points (knots) for bezier curves.
-    # 0 = straight line with only tweening applied.
     knots: int = 2
-
-    # How far (in pixels) knots may deviate from the straight line.
     distortion_mean: float = 1.0
     distortion_stdev: float = 1.0
     distortion_frequency: float = 0.5
-
-    # Tweening function applied to the parametric t ∈ [0, 1].
     tween: Any = pytweening.easeOutQuad
-
-    # How many discrete steps the curve is split into.
     target_points: int = 80
-
-    # Base seconds between each step (randomised a bit).
     step_delay: float = 0.002
 
 
@@ -362,12 +362,10 @@ BEZIER_CURVE = CurveParams()
 
 
 def _bernstein_basis(n: int, i: int, t: float) -> float:
-    """Bernstein basis polynomial B_{i,n}(t)."""
     return math.comb(n, i) * (t ** i) * ((1 - t) ** (n - i))
 
 
 def _evaluate_bezier(control_points: list[tuple[float, float]], t: float) -> tuple[float, float]:
-    """Evaluate a bezier curve defined by *control_points* at parameter *t*."""
     n = len(control_points) - 1
     x = sum(_bernstein_basis(n, i, t) * p[0] for i, p in enumerate(control_points))
     y = sum(_bernstein_basis(n, i, t) * p[1] for i, p in enumerate(control_points))
@@ -379,7 +377,6 @@ def _generate_internal_knots(
     end: tuple[float, float],
     params: CurveParams,
 ) -> list[tuple[float, float]]:
-    """Generate random internal knots between *start* and *end*."""
     if params.knots <= 0:
         return []
 
@@ -405,13 +402,6 @@ def generate_curve_points(
     to_pt: tuple[float, float],
     params: CurveParams,
 ) -> list[tuple[int, int]]:
-    """
-    Return a list of integer (x, y) screen coordinates tracing a curve from
-    *from_pt* to *to_pt* according to *params*.
-
-    The tweening function is applied to the parametric variable so that
-    acceleration / deceleration is baked into the spacing of points.
-    """
     control_points: list[tuple[float, float]] = [
         from_pt,
         *_generate_internal_knots(from_pt, to_pt, params),
@@ -430,12 +420,10 @@ def generate_curve_points(
         fx, fy = _evaluate_bezier(control_points, t)
         pt = (int(round(fx)), int(round(fy)))
 
-        # Deduplicate consecutive identical pixel positions.
         if pt not in seen:
             points.append(pt)
             seen.add(pt)
 
-    # Always ensure we end exactly on the target.
     target = (int(round(to_pt[0])), int(round(to_pt[1])))
     if not points or points[-1] != target:
         points.append(target)
@@ -499,6 +487,10 @@ class GameInputs:
     # We track the last position ourselves since SendInput has no getter.
     _last_mouse_pos: tuple[int, int] = field(default=(0, 0), init=False)
 
+    # Window handle for PostMessage keyboard input.
+    # Set after construction by GameInterface.__init__().
+    _hwnd: ctypes.wintypes.HWND = field(default=ctypes.wintypes.HWND(0), init=False)
+
     CTRL = FunctionKey("ctrl")
     SHIFT = FunctionKey("shift")
     CLICK_LEFT = Click("left")
@@ -532,6 +524,10 @@ class GameInputs:
     TOGGLE_INVENTORY: Input = Input(keyboard=KeyboardInput("i"))
     CLOSE_WINDOW: Input = Input(keyboard=KeyboardInput("esc"))
     ATTACK_BUTTON: Input = Input(keyboard=KeyboardInput("space"))
+
+    def set_hwnd(self, hwnd: ctypes.wintypes.HWND) -> None:
+        """Bind this input controller to a game window handle."""
+        self._hwnd = hwnd
 
     @property
     def hotkeys(self) -> list[Input]:
@@ -634,20 +630,20 @@ class GameInputs:
 
         for px, py in points:
             move_to(px, py)
-            # Small random jitter on the delay keeps the movement organic.
             jitter = random.uniform(0.5, 1.5)
             time.sleep(params.step_delay * jitter)
 
     # -----------------------------------------------------------------------
-    # Keyboard helpers
+    # Keyboard helpers – PostMessage to game window
     # -----------------------------------------------------------------------
 
     def _press_with_modifier(self, key: str, fc_key: FunctionKey | None):
+        hwnd = self._hwnd
         if fc_key:
-            key_down(fc_key.key)
-        press(key)
+            post_key_down(hwnd, fc_key.key)
+        post_press(hwnd, key)
         if fc_key:
-            key_up(fc_key.key)
+            post_key_up(hwnd, fc_key.key)
 
     # -----------------------------------------------------------------------
     # Main execute entry-point
@@ -672,10 +668,10 @@ class GameInputs:
             if ms.click is not None:
                 self._cooldown(min_delay)
                 if ms.function_key:
-                    key_down(ms.function_key.key)
-                click(button=ms.click.key)
+                    post_key_down(self._hwnd, ms.function_key.key)
+                mouse_click(button=ms.click.key)
                 if ms.function_key:
-                    key_up(ms.function_key.key)
+                    post_key_up(self._hwnd, ms.function_key.key)
 
     def toggle_key(
             self,
@@ -683,7 +679,7 @@ class GameInputs:
             hold: bool = True
     ):
         if input.keyboard is not None and input.keyboard.key is not None:
-            if hold:  # NOTE: This could be auto-detected with windows API
-                key_down(input.keyboard.key)
+            if hold:
+                post_key_down(self._hwnd, input.keyboard.key)
             else:
-                key_up(input.keyboard.key)
+                post_key_up(self._hwnd, input.keyboard.key)
