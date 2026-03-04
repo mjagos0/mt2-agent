@@ -45,7 +45,7 @@ class GameInterface(ABC):
         self.inputs = GameInputs(**input_overrides)
         self.ui = GameUI()
 
-        self.stuck = StuckDetector(args.unstuck_check_interval, args.unstuck_threshold)
+        self.stuck = StuckDetector(args.unstuck_interval, args.unstuck_threshold)
         self.obj_det = ObjectDetector(
             args.obj_model_path,
             args.obj_model_confidence_cutoff,
