@@ -353,7 +353,7 @@ class MetinAgent:
         self._schedule(
             "auto-pickup", self.game.pickup_items, self.args.auto_pickup_interval
         )
-        self._schedule("auto-cape", self.game.bravery_cape, 5)
+        self._schedule("auto-cape", self.game.bravery_cape, 3)
         self._schedule(
             "stuck-detection",
             self.game.stuck_detection,

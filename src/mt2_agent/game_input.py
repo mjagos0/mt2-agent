@@ -195,9 +195,9 @@ def _key_up(key: str) -> None:
 def _press(key: str) -> None:
     """Press and release a key via scan code."""
     sc = _resolve_scan_code(key)
-    down = _make_key_input(sc, _key_flags(key, up=False))
-    up = _make_key_input(sc, _key_flags(key, up=True))
-    _send_inputs(down, up)
+    _send_inputs(_make_key_input(sc, _key_flags(key, up=False)))
+    time.sleep(0.05)
+    _send_inputs(_make_key_input(sc, _key_flags(key, up=True)))
 
 
 # ---------------------------------------------------------------------------
