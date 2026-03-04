@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-import interception
-from interception import MouseButton
+import ctypes
+import ctypes.wintypes
 import pytweening  # type: ignore[import-untyped]
 
 import math
@@ -11,6 +11,303 @@ import random
 import time
 
 from .window import ScreenPt
+
+
+# ---------------------------------------------------------------------------
+# Win32 SendInput structures and constants
+# ---------------------------------------------------------------------------
+
+user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+
+# Input type constants
+INPUT_MOUSE = 0
+INPUT_KEYBOARD = 1
+
+# Keyboard event flags
+KEYEVENTF_SCANCODE = 0x0008
+KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_EXTENDEDKEY = 0x0001
+
+# Mouse event flags
+MOUSEEVENTF_MOVE = 0x0001
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
+MOUSEEVENTF_MIDDLEDOWN = 0x0020
+MOUSEEVENTF_MIDDLEUP = 0x0040
+MOUSEEVENTF_ABSOLUTE = 0x8000
+
+# Screen metrics for absolute mouse coordinates (0-65535 range)
+SM_CXSCREEN = 0
+SM_CYSCREEN = 1
+
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.wintypes.LONG),
+        ("dy", ctypes.wintypes.LONG),
+        ("mouseData", ctypes.wintypes.DWORD),
+        ("dwFlags", ctypes.wintypes.DWORD),
+        ("time", ctypes.wintypes.DWORD),
+        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", ctypes.wintypes.WORD),
+        ("wScan", ctypes.wintypes.WORD),
+        ("dwFlags", ctypes.wintypes.DWORD),
+        ("time", ctypes.wintypes.DWORD),
+        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+
+class HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", ctypes.wintypes.DWORD),
+        ("wParamL", ctypes.wintypes.WORD),
+        ("wParamH", ctypes.wintypes.WORD),
+    ]
+
+
+class _INPUT_UNION(ctypes.Union):
+    _fields_ = [
+        ("mi", MOUSEINPUT),
+        ("ki", KEYBDINPUT),
+        ("hi", HARDWAREINPUT),
+    ]
+
+
+class INPUT(ctypes.Structure):
+    _fields_ = [
+        ("type", ctypes.wintypes.DWORD),
+        ("union", _INPUT_UNION),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Scan-code lookup table  (Set 1 / AT scan codes)
+# ---------------------------------------------------------------------------
+# Extended keys (those prefixed with 0xE0 on the PS/2 wire) have the
+# ``extended`` flag set to True; SendInput needs KEYEVENTF_EXTENDEDKEY for
+# them.
+
+_SCAN_CODES: dict[str, tuple[int, bool]] = {
+    # Number row
+    "1": (0x02, False),
+    "2": (0x03, False),
+    "3": (0x04, False),
+    "4": (0x05, False),
+    "5": (0x06, False),
+    "6": (0x07, False),
+    "7": (0x08, False),
+    "8": (0x09, False),
+    "9": (0x0A, False),
+    "0": (0x0B, False),
+
+    # Letters (QWERTY)
+    "q": (0x10, False),
+    "w": (0x11, False),
+    "e": (0x12, False),
+    "r": (0x13, False),
+    "t": (0x14, False),
+    "y": (0x15, False),
+    "u": (0x16, False),
+    "i": (0x17, False),
+    "o": (0x18, False),
+    "p": (0x19, False),
+    "a": (0x1E, False),
+    "s": (0x1F, False),
+    "d": (0x20, False),
+    "f": (0x21, False),
+    "g": (0x22, False),
+    "h": (0x23, False),
+    "j": (0x24, False),
+    "k": (0x25, False),
+    "l": (0x26, False),
+    "z": (0x2C, False),
+    "x": (0x2D, False),
+    "c": (0x2E, False),
+    "v": (0x2F, False),
+    "b": (0x30, False),
+    "n": (0x31, False),
+    "m": (0x32, False),
+
+    # Special keys
+    "esc": (0x01, False),
+    "escape": (0x01, False),
+    "return": (0x1C, False),
+    "enter": (0x1C, False),
+    "space": (0x39, False),
+    "tab": (0x0F, False),
+    "backspace": (0x0E, False),
+
+    # Modifiers
+    "shift": (0x2A, False),       # Left Shift
+    "lshift": (0x2A, False),
+    "rshift": (0x36, False),
+    "ctrl": (0x1D, False),        # Left Ctrl
+    "lctrl": (0x1D, False),
+    "rctrl": (0x1D, True),        # Right Ctrl is extended
+    "alt": (0x38, False),         # Left Alt
+    "lalt": (0x38, False),
+    "ralt": (0x38, True),         # Right Alt is extended
+
+    # Function keys
+    "f1": (0x3B, False),
+    "f2": (0x3C, False),
+    "f3": (0x3D, False),
+    "f4": (0x3E, False),
+    "f5": (0x3F, False),
+    "f6": (0x40, False),
+    "f7": (0x41, False),
+    "f8": (0x42, False),
+    "f9": (0x43, False),
+    "f10": (0x44, False),
+    "f11": (0x57, False),
+    "f12": (0x58, False),
+
+    # Arrow keys (extended)
+    "up": (0x48, True),
+    "down": (0x50, True),
+    "left": (0x4B, True),
+    "right": (0x4D, True),
+
+    # Navigation cluster (extended)
+    "insert": (0x52, True),
+    "delete": (0x53, True),
+    "home": (0x47, True),
+    "end": (0x4F, True),
+    "pageup": (0x49, True),
+    "pagedown": (0x51, True),
+}
+
+
+# ---------------------------------------------------------------------------
+# Low-level SendInput helpers
+# ---------------------------------------------------------------------------
+
+def _send_inputs(*inputs: INPUT) -> int:
+    """Send one or more INPUT structures via SendInput."""
+    arr = (INPUT * len(inputs))(*inputs)
+    return user32.SendInput(len(arr), arr, ctypes.sizeof(INPUT))
+
+
+def _make_key_input(scan_code: int, extended: bool, key_up: bool) -> INPUT:
+    """Create a keyboard INPUT struct using a hardware scan code."""
+    flags = KEYEVENTF_SCANCODE
+    if extended:
+        flags |= KEYEVENTF_EXTENDEDKEY
+    if key_up:
+        flags |= KEYEVENTF_KEYUP
+
+    ki = KEYBDINPUT(
+        wVk=0,
+        wScan=scan_code,
+        dwFlags=flags,
+        time=0,
+        dwExtraInfo=ctypes.pointer(ctypes.c_ulong(0)),
+    )
+    inp = INPUT(type=INPUT_KEYBOARD)
+    inp.union.ki = ki
+    return inp
+
+
+def _resolve_scan(key: str) -> tuple[int, bool]:
+    """Look up the scan code and extended flag for a key name."""
+    lower = key.lower()
+    if lower not in _SCAN_CODES:
+        raise ValueError(f"Unknown key name: {key!r} – add it to _SCAN_CODES")
+    return _SCAN_CODES[lower]
+
+
+def key_down(key: str) -> None:
+    """Send a key-down event for *key* using its hardware scan code."""
+    scan, ext = _resolve_scan(key)
+    _send_inputs(_make_key_input(scan, ext, key_up=False))
+
+
+def key_up(key: str) -> None:
+    """Send a key-up event for *key* using its hardware scan code."""
+    scan, ext = _resolve_scan(key)
+    _send_inputs(_make_key_input(scan, ext, key_up=True))
+
+
+def press(key: str) -> None:
+    """Full key press (down + up) in a single SendInput call."""
+    scan, ext = _resolve_scan(key)
+    _send_inputs(
+        _make_key_input(scan, ext, key_up=False),
+        _make_key_input(scan, ext, key_up=True),
+    )
+
+
+def _screen_size() -> tuple[int, int]:
+    """Return the primary monitor resolution in pixels."""
+    return (
+        user32.GetSystemMetrics(SM_CXSCREEN),
+        user32.GetSystemMetrics(SM_CYSCREEN),
+    )
+
+
+def move_to(x: int, y: int) -> None:
+    """Move the mouse cursor to absolute screen pixel coordinates (*x*, *y*)."""
+    cx, cy = _screen_size()
+    # SendInput MOUSEEVENTF_ABSOLUTE uses a 0–65535 normalised coordinate
+    # space.  The +1 on the denominator avoids the cursor being 1px short
+    # of the bottom/right edge (standard workaround).
+    abs_x = int(x * 65536 / cx)
+    abs_y = int(y * 65536 / cy)
+
+    mi = MOUSEINPUT(
+        dx=abs_x,
+        dy=abs_y,
+        mouseData=0,
+        dwFlags=MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
+        time=0,
+        dwExtraInfo=ctypes.pointer(ctypes.c_ulong(0)),
+    )
+    inp = INPUT(type=INPUT_MOUSE)
+    inp.union.mi = mi
+    _send_inputs(inp)
+
+
+def click(button: str = "left") -> None:
+    """Click (press + release) a mouse button at the current cursor position."""
+    if button == "left":
+        down_flag = MOUSEEVENTF_LEFTDOWN
+        up_flag = MOUSEEVENTF_LEFTUP
+    elif button == "right":
+        down_flag = MOUSEEVENTF_RIGHTDOWN
+        up_flag = MOUSEEVENTF_RIGHTUP
+    elif button == "middle":
+        down_flag = MOUSEEVENTF_MIDDLEDOWN
+        up_flag = MOUSEEVENTF_MIDDLEUP
+    else:
+        raise ValueError(f"Unsupported mouse button: {button!r}")
+
+    mi_down = MOUSEINPUT(
+        dx=0, dy=0, mouseData=0, dwFlags=down_flag, time=0,
+        dwExtraInfo=ctypes.pointer(ctypes.c_ulong(0)),
+    )
+    mi_up = MOUSEINPUT(
+        dx=0, dy=0, mouseData=0, dwFlags=up_flag, time=0,
+        dwExtraInfo=ctypes.pointer(ctypes.c_ulong(0)),
+    )
+    inp_down = INPUT(type=INPUT_MOUSE)
+    inp_down.union.mi = mi_down
+    inp_up = INPUT(type=INPUT_MOUSE)
+    inp_up.union.mi = mi_up
+    _send_inputs(inp_down, inp_up)
+
+
+# ---------------------------------------------------------------------------
+# Type alias replacing interception.MouseButton
+# ---------------------------------------------------------------------------
+
+MouseButton = Literal["left", "right", "middle"]
 
 
 class MovementType(Enum):
@@ -23,7 +320,7 @@ class MovementType(Enum):
 # Custom point-interpolation helpers
 # ---------------------------------------------------------------------------
 # These replace interception's built-in bezier/linear movement so that we
-# only ever call `interception.move_to(x, y)` (the instant warp), which does
+# only ever call `move_to(x, y)` (the instant warp), which does
 # NOT activate the Windows "enhance pointer precision" setting.
 # ---------------------------------------------------------------------------
 
@@ -199,7 +496,7 @@ class GameInputs:
 
     _last_action_time: float = field(default=0.0, init=False)
 
-    # We track the last position ourselves since interception has no getter.
+    # We track the last position ourselves since SendInput has no getter.
     _last_mouse_pos: tuple[int, int] = field(default=(0, 0), init=False)
 
     CTRL = FunctionKey("ctrl")
@@ -285,12 +582,12 @@ class GameInputs:
         movement: MovementType = MovementType.Instant,
         min_delay: float | None = None,
     ) -> None:
-        click = Click(button)
+        click_obj = Click(button)
         self.execute(
             Input(
                 mouse=MouseInput(
                     position=Position(pt, movement),
-                    click=click,
+                    click=click_obj,
                     function_key=modifier,
                 )
             ),
@@ -321,7 +618,7 @@ class GameInputs:
 
         match position.movementType:
             case MovementType.Instant:
-                interception.move_to(x, y)
+                move_to(x, y)
             case MovementType.Linear:
                 self._interpolated_move(x, y, LINEAR_CURVE)
             case MovementType.Bezier:
@@ -336,7 +633,7 @@ class GameInputs:
         points = generate_curve_points(from_pt, to_pt, params)
 
         for px, py in points:
-            interception.move_to(px, py)
+            move_to(px, py)
             # Small random jitter on the delay keeps the movement organic.
             jitter = random.uniform(0.5, 1.5)
             time.sleep(params.step_delay * jitter)
@@ -347,10 +644,10 @@ class GameInputs:
 
     def _press_with_modifier(self, key: str, fc_key: FunctionKey | None):
         if fc_key:
-            interception.key_down(fc_key.key)
-        interception.press(key)
+            key_down(fc_key.key)
+        press(key)
         if fc_key:
-            interception.key_up(fc_key.key)
+            key_up(fc_key.key)
 
     # -----------------------------------------------------------------------
     # Main execute entry-point
@@ -375,10 +672,10 @@ class GameInputs:
             if ms.click is not None:
                 self._cooldown(min_delay)
                 if ms.function_key:
-                    interception.key_down(ms.function_key.key)
-                interception.click(button=ms.click.key)
+                    key_down(ms.function_key.key)
+                click(button=ms.click.key)
                 if ms.function_key:
-                    interception.key_up(ms.function_key.key)
+                    key_up(ms.function_key.key)
 
     def toggle_key(
             self,
@@ -386,7 +683,7 @@ class GameInputs:
             hold: bool = True
     ):
         if input.keyboard is not None and input.keyboard.key is not None:
-            if hold: # NOTE: This could be auto-detected with windows API 
-                interception.key_down(input.keyboard.key)
+            if hold:  # NOTE: This could be auto-detected with windows API
+                key_down(input.keyboard.key)
             else:
-                interception.key_up(input.keyboard.key)
+                key_up(input.keyboard.key)

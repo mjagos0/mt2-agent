@@ -92,9 +92,9 @@ class GameInterface(ABC):
         screenshot = self._debug_capture(gameRec, f"spell_{hotkey.keyboard.key}")
         if is_hotkey_castable(screenshot):
             logger.info(f'Casting spell "{hotkey.keyboard.key}"')
-            self.inputs.execute(self.inputs.TOGGLE_HORSE)
+            self.inputs.execute(self.inputs.TOGGLE_HORSE, 0.2)
             self.inputs.execute(hotkey, 0.2)
-            self.inputs.execute(self.inputs.TOGGLE_HORSE)
+            self.inputs.execute(self.inputs.TOGGLE_HORSE, 0.2)
         else:
             logger.debug(f'Spell "{hotkey.keyboard.key}" unavailable')
 
@@ -115,9 +115,11 @@ class GameInterface(ABC):
 
     def bravery_cape(self):
         self.inputs.execute(self.inputs.BRAVERY_CAPE)
+        logger.info(f"Cape ({self.inputs.BRAVERY_CAPE})")
 
     def pickup_items(self):
         self.inputs.execute(self.inputs.PICKUP_ITEMS)
+        logger.info(f"Pick-up items ({self.inputs.PICKUP_ITEMS})")
 
     def unstuck(self):
         self.inputs.execute(self.inputs.DROP_METIN_QUEUE)
@@ -164,11 +166,14 @@ class GameInterface(ABC):
         center = obj.center
         logger.debug(f"Auto-targetting {obj.label}.")
         if obj.label == Label.BOSS:
+            logger.info(f"Found boss at {center}")
             self.inputs.execute(self.inputs.DROP_METIN_QUEUE)
             self.inputs.click(center)
         elif obj.label == Label.BOULDER:
+            logger.info(f"Found boulder at {center}")
             self.inputs.click(center, "right", modifier=self.inputs.SHIFT)
         elif obj.label == Label.ENEMY:
+            logger.info(f"Found enemy at {center}")
             self.inputs.click(center)
         else:
             raise RuntimeError(f'Unknown object type "{obj.label}"')
@@ -195,29 +200,31 @@ class GameInterface(ABC):
             logger.debug("Captcha window not detected")
             return
 
-        logger.info("Captcha window detected")
+        logger.info("Captcha: window detected")
         prompt = self._debug_capture(self.ui.CAPTCHA_PROMPT, "captcha-prompt")
         text = read_text(prompt)
         if (text is None):
             logger.error("Failed to read text from Captcha prompt")
             return
+        else:
+            logger.info(f"Captcha: Looking for {text}")
 
-        logger.info(f"Looking for {text}")
         item = self._fuzzy_match_group(text.split(" ")[1])
-
         challenge = self._debug_capture(self.ui.CAPTCHA_CHALLENGE, "captcha-challenge")
         result = find_first(challenge, self.asset.get_group(item), self.window.getScaleFactor())
         if not result:
             logger.error("Failed to solve Captcha")
             return
+        else:
+            logger.info(f"Captcha: Solution found")
 
-        logger.info(f"Solution found")
         x, y = result[1]
         itemPt = ScreenPt(
             challenge.origin_x + x, challenge.origin_y + y
         )  # TODO: Not good
         targetRect = self.window.gamerec_to_screenrec(self.ui.CAPTCHA_TARGET)
 
+        logger.info(f"Captcha: Moving {itemPt} to {targetRect.center}")
         self.inputs.click(itemPt, movement=MovementType.Bezier, min_delay=0.2)
         self.inputs.click(targetRect.center, movement=MovementType.Bezier, min_delay=1.0)
         # self.inputs.click(targetRect.center, movement=MovementType.Bezier, min_delay=0.2)
@@ -249,12 +256,17 @@ class GameInterface(ABC):
         if not find_template(trigger_window, template, self.window.getScaleFactor()):
             logger.debug("Login window not detected")
             return
+        else:
+            logger.info("Login window detected")
         
+        logger.info("Trying to login-in")
         ch3_button = self.window.gamept_to_screenpt(self.ui.LOGIN_CH3)
         self.inputs.click(ch3_button)
         self.inputs.execute(self.inputs.LOGIN_1)
+        logger.info("Logged-in")
         time.sleep(5)
         self.inputs.execute(self.inputs.LOGIN_CONFIRM)
+        logger.info("Character selected")
         time.sleep(5)
 
     def respawn(self):
@@ -270,16 +282,20 @@ class GameInterface(ABC):
             logger.debug("Respawn window not detected")
             return
 
-        logger.info("Respawn window detected")
+        logger.info("Trying to respawn")
         x, y = result
         windowCenter = ScreenPt(
             trigger_window.origin_x + x + 1, trigger_window.origin_y + y + 1
         )
 
         self.inputs.click(windowCenter, movement=MovementType.Bezier)
+        logger.info("Respawned")
         self.inputs.execute(self.inputs.TOGGLE_HORSE)
+        logger.info("Mounting horse")
+        
 
     def attack(self):
+        logger.info("Attack button toggled")
         self.inputs.toggle_key(self.inputs.ATTACK_BUTTON)
         
     def biolog(self):
