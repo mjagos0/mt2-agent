@@ -42,9 +42,6 @@ def main():
     else:
         logging.getLogger("mt2_agent").setLevel(logging.INFO)
 
-    # logging.getLogger("mt2_agent.window.window").setLevel(logging.WARNING)
-    # logging.getLogger("mt2_agent.window.screenshot").setLevel(logging.WARNING)
-
     input_overrides: dict[str, Input] = {}
     if args.rebind:
         for name, key in args.rebind:
@@ -62,6 +59,7 @@ def handle_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
+    # Parameter groups
     server_settings = p.add_argument_group("Core settings")
     features = p.add_argument_group("Features")
     input_settings = p.add_argument_group("Input settings")
@@ -69,9 +67,10 @@ def handle_args() -> argparse.Namespace:
     autotarget_settings = p.add_argument_group("Auto-target settings")
     captcha_settings = p.add_argument_group("Captcha settings")
     model_settings = p.add_argument_group("YOLO detection model settings")
-    developer_settings = p.add_argument_group("YOLO detection model settings")
+    developer_settings = p.add_argument_group("Developer settings")
     assets_settings = p.add_argument_group("Assets settings")
 
+    # Runtime settings
     server_settings.add_argument("server", type=str, choices=["Nothyr"], help="Name of Metin2 server")
     server_settings.add_argument(
         "--duration",
@@ -80,82 +79,29 @@ def handle_args() -> argparse.Namespace:
         help="Maximum duration of the agent's runtime in seconds",
     )
 
-    # Features frequency
-    features.add_argument(
-        "--auto-cast-interval",
-        type=int,
-        default=2,
-        help="How often to cast spells off cooldown. 0 to disable",
-    )
-    features.add_argument(
-        "--auto-pickup-interval",
-        type=int,
-        default=0,
-        help="How often to pick up items from ground. 0 to disable",
-    )
-    features.add_argument(
-        "--auto-cape-interval",
-        type=int,
-        default=3,
-        help="How often to use the cape. 0 to disable",
-    )
-    features.add_argument(
-        "--unstuck-check-interval",
-        type=int,
-        default=5,
-        help="How often to check character coordinates",
-    )
-    features.add_argument(
-        "--auto-target-interval",
-        type=int,
-        default=3,
-        help="How often to detect targets",
-    )
-    features.add_argument(
-        "--captcha-check",
-        type=int,
-        default=3,
-        help="How often to check for captcha window",
-    )
-    features.add_argument(
-        "--respawn-check",
-        type=int,
-        default=5,
-        help="How often to check for respawn",
-    )
-    features.add_argument(
-        "--login-check",
-        type=int,
-        default=5,
-        help="How often to check for login screen",
-    )
-    features.add_argument(
-        "--biolog",
-        type=int,
-        default=0,
-        help="How often to try to hand in biolog items",
-    )
-    features.add_argument(
-        "--attack",
-        type=bool,
-        default=False,
-        help="Character will stand in place and hold spacebar",
-    )
+    # Features on/off
+    features.add_argument("--no-spells", dest="spells", action="store_false", help="Disable spell casting")
+    features.add_argument("--no-pickup", dest="pickup", action="store_false", help="Disable item pickup")
+    features.add_argument("--no-cape", dest="cape", action="store_false", help="Disable bravery cape")
+    features.add_argument("--no-stuck", dest="stuck", action="store_false", help="Disable stuck detection")
+    features.add_argument("--no-target", dest="target", action="store_false", help="Disable auto-targeting")
+    features.add_argument("--no-captcha", dest="captcha", action="store_false", help="Disable captcha detection")
+    features.add_argument("--no-respawn", dest="respawn", action="store_false", help="Disable respawn detection")
+    features.add_argument("--no-login", dest="login", action="store_false", help="Disable login detection")
+    features.add_argument("--biolog", dest="biolog", action="store_true", help="Enable biolog hand-in")
+    features.add_argument("--attack", dest="attack", action="store_true", help="Stand in place and hold spacebar")
 
-    # Input settings
-    input_settings.add_argument(
-        "--rebind",
-        nargs=2,
-        action="append",
-        metavar=("NAME", "KEY"),
-        help="Rebind a hotkey, e.g. --rebind HOTKEY_1 q --rebind PICKUP_ITEMS x",
-    )
-    input_settings.add_argument(
-        "--input-delay",
-        type=float,
-        default = 0.06,
-        help="Average delay between agent inputs"
-    )
+    # Feature intervals
+    features.add_argument("--spells-interval", type=float, default=2, help="Spell casting interval in seconds")
+    features.add_argument("--pickup-interval", type=float, default=0, help="Item pickup interval in seconds")
+    features.add_argument("--cape-interval", type=float, default=3, help="Bravery cape interval in seconds")
+    features.add_argument("--stuck-interval", type=float, default=5, help="Stuck detection check interval in seconds")
+    features.add_argument("--target-interval", type=float, default=3, help="Auto-target interval in seconds")
+    features.add_argument("--captcha-interval", type=float, default=5, help="Captcha check interval in seconds")
+    features.add_argument("--respawn-interval", type=float, default=5, help="Respawn check interval in seconds")
+    features.add_argument("--login-interval", type=float, default=5, help="Login check interval in seconds")
+    features.add_argument("--biolog-interval", type=float, default=30, help="Biolog hand-in interval in seconds")
+    features.add_argument("--attack-interval", type=float, default=9999999999, help="Attack interval in seconds")
 
     # Stuck detection
     stuck_settings.add_argument(
@@ -217,6 +163,21 @@ def handle_args() -> argparse.Namespace:
         help="Path to Captcha trigger image template",
     )
 
+    # Input settings
+    input_settings.add_argument(
+        "--rebind",
+        nargs=2,
+        action="append",
+        metavar=("NAME", "KEY"),
+        help="Rebind a hotkey, e.g. --rebind HOTKEY_1 q --rebind PICKUP_ITEMS x",
+    )
+    input_settings.add_argument(
+        "--input-delay",
+        type=float,
+        default=0.06,
+        help="Average delay between agent inputs",
+    )
+
     # Detection model
     model_settings.add_argument(
         "--obj-model-path",
@@ -238,7 +199,6 @@ def handle_args() -> argparse.Namespace:
         default="assets/icons",
         help="Path to folder with game icons",
     )
-
     assets_settings.add_argument(
         "--screenshot-path",
         default=DEFAULT_SCREENSHOT_PATH,
@@ -248,7 +208,7 @@ def handle_args() -> argparse.Namespace:
     # Developer
     developer_settings.add_argument("--debug", action="store_true", help="Show developer logs")
     developer_settings.add_argument(
-        "--debug-folder", default="debug", help="Developer folder for debugging"
+        "--debug-folder", default="debug", help="Developer folder for debugging",
     )
     developer_settings.add_argument(
         "--debug-folder-screenshots",
@@ -259,8 +219,8 @@ def handle_args() -> argparse.Namespace:
     args = p.parse_args()
 
     assert (
-        args.unstuck_threshold > args.unstuck_check_interval
-    ), f"--unstuck-threshold ({args.unstuck_threshold}) must be larger than --stuck-check-interval ({args.unstuck_check_interval})"
+        args.unstuck_threshold > args.stuck_interval
+    ), f"--unstuck-threshold ({args.unstuck_threshold}) must be larger than --stuck-interval ({args.stuck_interval})"
 
     return args
 
@@ -327,57 +287,31 @@ class MetinAgent:
             )
             heapq.heappush(self._heap, task)
 
+    def _schedule_feature(self, name: str, action_fn: Callable[[], None], enabled: bool, interval: float, initial_delay: float = 0):
+        if not enabled:
+            logger.info(f"{name} disabled")
+            return
+        self._schedule(name, action_fn, interval, initial_delay)
+
     def run(self):
-        # from .game_input import MovementType
-        # self.game.inputs.move(
-        #     self.game.window.screenPt(0, 0),
-        #     MovementType.Instant
-        # )
-        # return
-        # self.game.window.capture(self.game.ui.HOTKEY_F1).save(Path("HOTKEY_F1.png"))
-        # self.game.window.capture(self.game.ui.HOTKEY_F2).save(Path("HOTKEY_F2.png"))
-        # self.game.window.capture(self.game.ui.HOTKEY_F3).save(Path("HOTKEY_F3.png"))
-        # self.game.window.capture(self.game.ui.HOTKEY_F4).save(Path("HOTKEY_F4.png"))
-        # logger.info(self.game.window.getScaleFactor())
-
-        # return
-
-        # self.game.window.capture(self.game.ui.CAPTCHA_DETECT).save(Path("Captcha.png"))
-        # return
-        # self.game.pickup_items()
-        # return
-        # Register all periodic tasks
-        self._schedule("login", self.game.login, self.args.login_check)
-        self._schedule("respawn", self.game.respawn, self.args.respawn_check)
-        self._schedule("auto-cast", self.game.cast_spells, self.args.auto_cast_interval)
-        self._schedule(
-            "auto-pickup", self.game.pickup_items, self.args.auto_pickup_interval
-        )
-        self._schedule("auto-cape", self.game.bravery_cape, self.args.auto_cape_interval)
-        self._schedule(
-            "stuck-detection",
-            self.game.stuck_detection,
-            self.args.unstuck_check_interval,
-        )
-        self._schedule(
-            "auto-target", self.game.auto_target, self.args.auto_target_interval
-        )
-        self._schedule("captcha", self.game.captcha, self.args.captcha_check)
-        self._schedule("biolog", self.game.biolog, self.args.biolog, 30)
-
-        if (self.args.attack):
-            self._schedule("attack", self.game.attack, 9999999999, 2)
-        
+        self._schedule_feature("login", self.game.login, self.args.login, self.args.login_interval)
+        self._schedule_feature("respawn", self.game.respawn, self.args.respawn, self.args.respawn_interval)
+        self._schedule_feature("auto-cast", self.game.cast_spells, self.args.spells, self.args.spells_interval)
+        self._schedule_feature("auto-pickup", self.game.pickup_items, self.args.pickup, self.args.pickup_interval)
+        self._schedule_feature("auto-cape", self.game.bravery_cape, self.args.cape, self.args.cape_interval)
+        self._schedule_feature("stuck-detection", self.game.stuck_detection, self.args.stuck, self.args.stuck_interval)
+        self._schedule_feature("auto-target", self.game.auto_target, self.args.target, self.args.target_interval)
+        self._schedule_feature("captcha", self.game.captcha, self.args.captcha, self.args.captcha_interval)
+        self._schedule_feature("biolog", self.game.biolog, self.args.biolog, self.args.biolog_interval, 30)
+        self._schedule_feature("attack", self.game.attack, self.args.attack, self.args.attack_interval, 2)
 
         while self._should_run():
-            # Peek at the earliest task — O(1)
             task = self._heap[0]
 
             sleep_for = task.next_run - time.monotonic()
             if sleep_for > 0:
                 time.sleep(sleep_for)
 
-            # Ensure agent is active
             self.assertWindowAlive()
             self.assertWindowFocused()
 
@@ -385,11 +319,9 @@ class MetinAgent:
                 time.sleep(0.1)
                 continue
 
-            # Pop and execute
             task = heapq.heappop(self._heap)
             task.action_fn()
 
-            # Reschedule
             task.next_run = time.monotonic() + task.interval
             heapq.heappush(self._heap, task)
 
