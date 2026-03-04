@@ -135,6 +135,12 @@ def handle_args() -> argparse.Namespace:
         default=0,
         help="How often to try to hand in biolog items",
     )
+    features.add_argument(
+        "--attack",
+        type=bool,
+        default=False,
+        help="Character will stand in place and hold spacebar",
+    )
 
     # Input settings
     input_settings.add_argument(
@@ -358,6 +364,9 @@ class MetinAgent:
         )
         self._schedule("captcha", self.game.captcha, self.args.captcha_check)
         self._schedule("biolog", self.game.biolog, self.args.biolog, 30)
+
+        if (self.args.attack):
+            self._schedule("attack", self.game.attack, 9999999999, 2)
         
 
         while self._should_run():

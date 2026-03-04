@@ -232,7 +232,9 @@ class GameInputs:
     # Nothyr
     DROP_METIN_QUEUE: Input = Input()
     OPEN_BIOLOG_KEY: Input = Input()
+    TOGGLE_INVENTORY: Input = Input(keyboard=KeyboardInput("i"))
     CLOSE_WINDOW: Input = Input(keyboard=KeyboardInput("esc"))
+    ATTACK_BUTTON: Input = Input(keyboard=KeyboardInput("space"))
 
     @property
     def hotkeys(self) -> list[Input]:
@@ -377,3 +379,14 @@ class GameInputs:
                 interception.click(button=ms.click.key)
                 if ms.function_key:
                     interception.key_up(ms.function_key.key)
+
+    def toggle_key(
+            self,
+            input: Input,
+            hold: bool = True
+    ):
+        if input.keyboard is not None and input.keyboard.key is not None:
+            if hold: # NOTE: This could be auto-detected with windows API 
+                interception.key_down(input.keyboard.key)
+            else:
+                interception.key_up(input.keyboard.key)

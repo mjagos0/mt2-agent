@@ -86,7 +86,7 @@ class GameUI:
     _23 = (2/3, 0.0)
 
     BIOLOG_SHOP: GamePt = GamePt(_C, (102, -69.5))
-    BIOLOG_CONFIRM: GamePt = GamePt(_C, (15.5, -114.5))
+    BIOLOG_CONFIRM: GamePt = GamePt(_C, (15.5, -116))
     BIOLOG_OK: GamePt = GamePt(_C, (1.5, 20))
     BIOLOG_SHOP_EXIT: GameRectangle = GameRectangle((0.6421, 0.0), (366.75, 209), (16, 17))
 

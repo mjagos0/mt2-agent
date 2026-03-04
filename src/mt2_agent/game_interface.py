@@ -278,39 +278,43 @@ class GameInterface(ABC):
 
         self.inputs.click(windowCenter, movement=MovementType.Bezier)
         self.inputs.execute(self.inputs.TOGGLE_HORSE)
+
+    def attack(self):
+        self.inputs.toggle_key(self.inputs.ATTACK_BUTTON)
         
     def biolog(self):
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        shop = self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP)
-        self.inputs.click(shop)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # shop = self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP)
+        # self.inputs.click(shop)
 
-        for item in self.ui.biolog_items:
-            for _ in range(3):
-                itemRect = self.window.gamerec_to_screenrec(item)
-                self.inputs.click(itemRect.center, "right", min_delay=0.03)
-                okPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_OK)
-                self.inputs.click(okPt, "left", min_delay=0.03)
+        # for item in self.ui.biolog_items:
+        #     for _ in range(3):
+        #         itemRect = self.window.gamerec_to_screenrec(item)
+        #         self.inputs.click(itemRect.center, "right", min_delay=0.03)
+        #         okPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_OK)
+        #         self.inputs.click(okPt, "left", min_delay=0.03)
 
-        itemRect = self.window.gamerec_to_screenrec(self.ui.biolog_items[0])
-        self.inputs.click(itemRect.center, "left", min_delay=0.05)
-        self.inputs.click(itemRect.center, "left", min_delay=0.05)
-        self.inputs.execute(self.inputs.CLOSE_WINDOW)
+        # itemRect = self.window.gamerec_to_screenrec(self.ui.biolog_items[0])
+        # self.inputs.click(itemRect.center, "left", min_delay=0.05)
+        # self.inputs.click(itemRect.center, "left", min_delay=0.05)
+        # self.inputs.execute(self.inputs.CLOSE_WINDOW)
 
-        shopExit = self.window.gamerec_to_screenrec(self.ui.BIOLOG_SHOP_EXIT)
-        self.inputs.click(shopExit.center, "left")
+        # shopExit = self.window.gamerec_to_screenrec(self.ui.BIOLOG_SHOP_EXIT)
+        # self.inputs.click(shopExit.center, "left")
+        
+        # self.inputs.click(confirmPt, min_delay=0.2)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # self.inputs.click(confirmPt, min_delay=0.2)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # self.inputs.click(confirmPt, min_delay=0.2)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
+        # self.inputs.click(confirmPt, min_delay=0.2)
+        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
         confirmPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_CONFIRM)
-        self.inputs.click(confirmPt, min_delay=0.2)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.click(confirmPt, min_delay=0.2)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.click(confirmPt, min_delay=0.2)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.click(confirmPt, min_delay=0.2)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.click(confirmPt, min_delay=0.2)
-        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        self.inputs.execute(self.inputs.CLOSE_WINDOW)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY, min_delay=1)
+        self.inputs.click(confirmPt, movement=MovementType.Bezier, min_delay=1)
+        self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY, min_delay=1)
+        # self.inputs.execute(self.inputs.CLOSE_WINDOW, min_delay=1)
