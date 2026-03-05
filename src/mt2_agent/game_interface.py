@@ -45,7 +45,7 @@ class GameInterface(ABC):
         self.inputs = GameInputs(**input_overrides)
         self.ui = GameUI()
 
-        self.stuck = StuckDetector(args.unstuck_interval, args.unstuck_threshold)
+        self.stuck = StuckDetector(args.stuck_interval, args.unstuck_threshold)
         self.obj_det = ObjectDetector(
             args.obj_model_path,
             args.obj_model_confidence_cutoff,
@@ -198,7 +198,7 @@ class GameInterface(ABC):
 
         obj = self.obj_det.detect_priority(result)
 
-        if not obj:
+        if not obj: # TODO: Should create new label NO_TARGET to avoid this block
             logger.debug("No target detected.")
             if self.args.target_random:
                 pt = self.window.random_point_from_center(
@@ -209,14 +209,14 @@ class GameInterface(ABC):
 
         center = obj.center
         logger.debug(f"Auto-targetting {obj.label}.")
-        if obj.label == Label.BOSS:
+        if self.args.target_boss and obj.label == Label.BOSS:
             logger.info(f"Found boss at {center}")
             self.inputs.execute(self.inputs.DROP_METIN_QUEUE)
             self.inputs.click(center)
-        elif obj.label == Label.BOULDER:
+        elif self.args.boulder and obj.label == Label.BOULDER:
             logger.info(f"Found boulder at {center}")
             self.inputs.click(center, "right", modifier=self.inputs.SHIFT)
-        elif obj.label == Label.ENEMY:
+        elif self.args.target_enemy and Label.ENEMY:
             logger.info(f"Found enemy at {center}")
             self.inputs.click(center)
         else:
