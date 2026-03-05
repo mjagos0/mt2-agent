@@ -45,13 +45,10 @@ class GameInterface(ABC):
         self.inputs = GameInputs(**input_overrides)
         self.ui = GameUI()
 
-        self.stuck = StuckDetector(args.stuck_interval, args.unstuck_threshold)
+        self.stuck = StuckDetector(args.unstuck_threshold)
         self.obj_det = ObjectDetector(
             args.obj_model_path,
             args.obj_model_confidence_cutoff,
-            args.target_boss,
-            args.target_boulder,
-            args.target_enemy,
         )
         self.asset = AssetManager(args.asset_icon_dir)
 
@@ -164,15 +161,21 @@ class GameInterface(ABC):
         self.inputs.execute(self.inputs.PICKUP_ITEMS)
         logger.info(f"Pick-up items ({self.inputs.PICKUP_ITEMS})")
 
-    def unstuck(self):
+    def unstuck(self, unstuck_clicks: int, unstuck_interval: float, unstuck_center_radius: float):
         self.inputs.execute(self.inputs.DROP_METIN_QUEUE)
         self.event_screenshot("stuck-detection: unstuck procedure started")
-        for _ in range(self.args.unstuck_clicks):
-            pt = self.window.random_point_from_center(self.args.unstuck_center_radius)
+        for _ in range(unstuck_clicks):
+            pt = self.window.random_point_from_center(unstuck_center_radius)
             self.inputs.click(pt)
-            time.sleep(self.args.unstuck_interval)
+            time.sleep(unstuck_interval)
 
-    def stuck_detection(self):
+    def stuck_detection(
+        self,
+        unstuck_threshold: int,
+        unstuck_clicks: int,
+        unstuck_interval: float,
+        unstuck_center_radius: float
+    ):
         screenshot = self._debug_capture(self.ui.COORDINATES, "coordinates")
         coordinates = read_coordinates(screenshot)
         if coordinates is None:
@@ -181,10 +184,19 @@ class GameInterface(ABC):
             )
             return
 
-        if self.stuck.is_stuck(coordinates):
-            self.unstuck()
+        # Keep the StuckDetector's threshold in sync with the live param.
+        self.stuck.stagnant_duration_threshold = unstuck_threshold
 
-    def auto_target(self):
+        if self.stuck.is_stuck(coordinates):
+            self.unstuck(unstuck_clicks, unstuck_interval, unstuck_center_radius)
+
+    def auto_target(
+        self,
+        target_boss: int,
+        target_boulder: int,
+        target_enemy: int,
+        target_random: int,
+    ):
         screenshot = self.window.capture()
         result = self.obj_det.detect(screenshot)
 
@@ -196,11 +208,17 @@ class GameInterface(ABC):
                 )
             )  # TODO: Should unify with _debug_capture or sth
 
-        obj = self.obj_det.detect_priority(result)
+        # Build priority order from the live params.
+        obj = self.obj_det.detect_priority(
+            result,
+            boss_priority=target_boss,
+            boulder_priority=target_boulder,
+            enemy_priority=target_enemy,
+        )
 
-        if not obj: # TODO: Should create new label NO_TARGET to avoid this block
+        if not obj:
             logger.debug("No target detected.")
-            if self.args.target_random:
+            if target_random > 0:
                 pt = self.window.random_point_from_center(
                     self.args.unstuck_center_radius
                 )
@@ -209,14 +227,14 @@ class GameInterface(ABC):
 
         center = obj.center
         logger.debug(f"Auto-targetting {obj.label}.")
-        if self.args.target_boss and obj.label == Label.BOSS:
+        if target_boss and obj.label == Label.BOSS:
             logger.info(f"Found boss at {center}")
             self.inputs.execute(self.inputs.DROP_METIN_QUEUE)
             self.inputs.click(center)
-        elif self.args.boulder and obj.label == Label.BOULDER:
+        elif target_boulder and obj.label == Label.BOULDER:
             logger.info(f"Found boulder at {center}")
             self.inputs.click(center, "right", modifier=self.inputs.SHIFT)
-        elif self.args.target_enemy and Label.ENEMY:
+        elif target_enemy and obj.label == Label.ENEMY:
             logger.info(f"Found enemy at {center}")
             self.inputs.click(center)
         else:

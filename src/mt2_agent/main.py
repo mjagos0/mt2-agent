@@ -121,7 +121,7 @@ def handle_args() -> argparse.Namespace:
         help="Number of clicks during unstuck procedure")
     stuck_settings.add_argument("--unstuck-interval", type=float, default=0.1,
         help="Duration between clicks during unstuck procedure")
-    stuck_settings.add_argument("--unstuck-center-radius", type=float, default=0.65,
+    stuck_settings.add_argument("--unstuck-center-radius", type=float, default=0.40,
         help="Percentual radius from center of the screen for clicks during unstuck procedure")
 
     # Auto target
@@ -192,9 +192,10 @@ def get_window(game: GameInterface):
 class ScheduledTask:
     next_run: float
     name: str = field(compare=False)
-    action_fn: Callable[[], None] = field(compare=False)
+    action_fn: Callable[..., None] = field(compare=False)
     interval: float = field(compare=False)
     enabled: bool = field(compare=False, default=True)
+    params: dict = field(compare=False, default_factory=dict)
 
 
 class MetinAgent:
@@ -211,8 +212,9 @@ class MetinAgent:
 
     # ── scheduling ──────────────────────────────────────────────────────
 
-    def _schedule(self, name: str, action_fn: Callable[[], None], interval: float,
-                  enabled: bool = True, initial_delay: float = 0):
+    def _schedule(self, name: str, action_fn: Callable[..., None], interval: float,
+                  enabled: bool = True, initial_delay: float = 0,
+                  params: dict | None = None):
         if interval == 0:
             logger.info(f"{name} not scheduled (interval=0)")
             return
@@ -224,13 +226,16 @@ class MetinAgent:
             action_fn=action_fn,
             interval=interval,
             enabled=enabled,
+            params=params if params is not None else {},
         )
         heapq.heappush(self._heap, task)
         self.all_tasks[name] = task
 
-    def _schedule_feature(self, name: str, action_fn: Callable[[], None],
-                          enabled: bool, interval: float, initial_delay: float = 0):
-        self._schedule(name, action_fn, interval, enabled=enabled, initial_delay=initial_delay)
+    def _schedule_feature(self, name: str, action_fn: Callable[..., None],
+                          enabled: bool, interval: float, initial_delay: float = 0,
+                          params: dict | None = None):
+        self._schedule(name, action_fn, interval, enabled=enabled,
+                       initial_delay=initial_delay, params=params)
         if not enabled:
             logger.info(f"{name} scheduled (disabled — toggle ON via GUI)")
 
@@ -241,8 +246,24 @@ class MetinAgent:
         self._schedule_feature("auto-cast",       self.game.cast_spells,     self.args.spells,   self.args.spells_interval)
         self._schedule_feature("auto-pickup",     self.game.pickup_items,    self.args.pickup,   self.args.pickup_interval)
         self._schedule_feature("auto-cape",       self.game.bravery_cape,    self.args.cape,     self.args.cape_interval)
-        self._schedule_feature("stuck-detection", self.game.stuck_detection, self.args.stuck,    self.args.stuck_interval)
-        self._schedule_feature("auto-target",     self.game.auto_target,     self.args.target,   self.args.target_interval)
+        self._schedule_feature(
+            "stuck-detection", self.game.stuck_detection, self.args.stuck, self.args.stuck_interval,
+            params={
+                "unstuck_threshold": self.args.unstuck_threshold,
+                "unstuck_clicks": self.args.unstuck_clicks,
+                "unstuck_interval": self.args.unstuck_interval,
+                "unstuck_center_radius": self.args.unstuck_center_radius,
+            },
+        )
+        self._schedule_feature(
+            "auto-target", self.game.auto_target, self.args.target, self.args.target_interval,
+            params={
+                "target_boss": self.args.target_boss,
+                "target_boulder": self.args.target_boulder,
+                "target_enemy": self.args.target_enemy,
+                "target_random": self.args.target_random,
+            },
+        )
         self._schedule_feature("captcha",         self.game.captcha,         self.args.captcha,  self.args.captcha_interval)
         self._schedule_feature("biolog",          self.game.biolog,          self.args.biolog,   self.args.biolog_interval, 30)
         self._schedule_feature("attack",          self.game.attack,          self.args.attack,   self.args.attack_interval, 2)
@@ -273,7 +294,7 @@ class MetinAgent:
 
             if task.enabled:
                 try:
-                    task.action_fn()
+                    task.action_fn(**task.params)
                 except Exception:
                     logger.exception("Error in task '%s'", task.name)
             else:

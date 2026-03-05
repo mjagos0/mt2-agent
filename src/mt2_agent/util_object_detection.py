@@ -88,8 +88,6 @@ class DetectionResult:
                 return det
         return None
 
-    # In DetectionResult, add this method:
-
     def annotated(self) -> Screenshot:
         """Return a copy of the screenshot with bounding boxes and centers drawn."""
         img = self.screenshot.data.copy()
@@ -142,25 +140,31 @@ class DetectionResult:
         return self.by_label(Label.ENEMY)
 
 
+def _build_priority_order(
+    boss_priority: int,
+    boulder_priority: int,
+    enemy_priority: int,
+) -> list[Label]:
+    """Build a priority-sorted label list from numeric priorities."""
+    priorities = {
+        Label.BOSS: boss_priority,
+        Label.BOULDER: boulder_priority,
+        Label.ENEMY: enemy_priority,
+    }
+    return [
+        l for l, _ in sorted(priorities.items(), key=lambda x: x[1], reverse=True)
+        if _ > 0
+    ]
+
+
 class ObjectDetector:
     def __init__(
         self,
         model_path: str,
         confidence: float,
-        boss_priority: int,
-        boulder_priority: int,
-        enemy_priority: int,
     ):
         self.model_path = model_path
         self.confidence = confidence
-        priorities = {
-            Label.BOSS: boss_priority,
-            Label.BOULDER: boulder_priority,
-            Label.ENEMY: enemy_priority,
-        }
-        self.priority_order: list[Label] = [
-            l for l, _ in sorted(priorities.items(), key=lambda x: x[1], reverse=True)
-        ]
         self.yolo = YOLO(self.model_path)
 
     def detect(self, screenshot: Screenshot) -> DetectionResult:
@@ -201,5 +205,12 @@ class ObjectDetector:
             _by_label=by_label,
         )
 
-    def detect_priority(self, detections: DetectionResult) -> Detection | None:
-        return detections.first_by_priority(self.priority_order)
+    def detect_priority(
+        self,
+        detections: DetectionResult,
+        boss_priority: int = 0,
+        boulder_priority: int = 3,
+        enemy_priority: int = 0,
+    ) -> Detection | None:
+        priority_order = _build_priority_order(boss_priority, boulder_priority, enemy_priority)
+        return detections.first_by_priority(priority_order)

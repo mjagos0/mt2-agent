@@ -2,7 +2,7 @@
 Tkinter control panel for the Metin2 Agent.
 
 Main thread: tkinter.  Bot loop: daemon thread.
-GUI mutates ScheduledTask.enabled / .interval and args.* directly.
+GUI mutates ScheduledTask.enabled / .interval / .params directly.
 """
 
 import tkinter as tk
@@ -55,10 +55,10 @@ FEATURES = [
 
 STUCK_PARAMS = [
     {"key": "stuck_interval",         "label": "Check interval", "unit": "sec",  "min": 1,    "max": 60,   "type": float},
-    {"key": "unstuck_threshold",      "label": "Threshold",      "unit": "sec",  "min": 5,    "max": 300,  "type": int},
-    {"key": "unstuck_clicks",         "label": "Clicks",         "unit": "",     "min": 1,    "max": 100,  "type": int},
-    {"key": "unstuck_interval",       "label": "Click delay",    "unit": "sec",  "min": 0.01, "max": 2.0,  "type": float},
-    {"key": "unstuck_center_radius",  "label": "Radius",         "unit": "%",    "min": 0.1,  "max": 1.0,  "type": float},
+    {"key": "unstuck_threshold",      "label": "Threshold",      "unit": "sec",  "min": 5,    "max": 300,  "type": int,   "task_param": True},
+    {"key": "unstuck_clicks",         "label": "Clicks",         "unit": "",     "min": 1,    "max": 100,  "type": int,   "task_param": True},
+    {"key": "unstuck_interval",       "label": "Click delay",    "unit": "sec",  "min": 0.01, "max": 2.0,  "type": float, "task_param": True},
+    {"key": "unstuck_center_radius",  "label": "Radius",         "unit": "%",    "min": 0.1,  "max": 1.0,  "type": float, "task_param": True},
 ]
 
 LOGIN_PARAMS = [
@@ -78,10 +78,10 @@ CAPTCHA_PARAMS = [
 ]
 
 TARGET_PARAMS = [
-    {"key": "target_boss",    "label": "Boss priority",    "min": 0, "max": 10, "type": int},
-    {"key": "target_boulder", "label": "Boulder priority", "min": 0, "max": 10, "type": int},
-    {"key": "target_enemy",   "label": "Enemy priority",   "min": 0, "max": 10, "type": int},
-    {"key": "target_random",  "label": "Random priority",  "min": 0, "max": 10, "type": int},
+    {"key": "target_boss",    "label": "Boss priority",    "min": 0, "max": 10, "type": int, "task_param": True},
+    {"key": "target_boulder", "label": "Boulder priority", "min": 0, "max": 10, "type": int, "task_param": True},
+    {"key": "target_enemy",   "label": "Enemy priority",   "min": 0, "max": 10, "type": int, "task_param": True},
+    {"key": "target_random",  "label": "Random priority",  "min": 0, "max": 10, "type": int, "task_param": True},
 ]
 
 SCREENSHOT_PARAMS = [
@@ -494,6 +494,12 @@ class ControlPanel(tk.Tk):
                               dtype=p["type"], unit=p["unit"], width=6,
                               on_change=lambda v: self._handle_interval("stuck-detection", v),
                               bg=BG_SEC)
+            elif p.get("task_param"):
+                # Task param — route changes through _set_task_param
+                inp = NumInput(row, value=0, min_v=p["min"], max_v=p["max"],
+                              dtype=p["type"], unit=p["unit"], width=6,
+                              on_change=lambda v, k=p["key"]: self._set_task_param("stuck-detection", k, v),
+                              bg=BG_SEC)
             else:
                 inp = NumInput(row, value=0, min_v=p["min"], max_v=p["max"],
                               dtype=p["type"], unit=p["unit"], width=6,
@@ -525,9 +531,16 @@ class ControlPanel(tk.Tk):
             row.pack(fill="x", pady=1)
             tk.Label(row, text=p["label"], font=(FONT, FONT_XS), bg=BG_SEC, fg=FG_DIM,
                      width=16, anchor="w").pack(side="left")
-            inp = NumInput(row, value=0, min_v=p["min"], max_v=p["max"],
-                          dtype=p["type"], unit="", width=4,
-                          on_change=lambda v, k=p["key"]: self._set_arg(k, v), bg=BG_SEC)
+
+            if p.get("task_param"):
+                inp = NumInput(row, value=0, min_v=p["min"], max_v=p["max"],
+                              dtype=p["type"], unit="", width=4,
+                              on_change=lambda v, k=p["key"]: self._set_task_param("auto-target", k, v),
+                              bg=BG_SEC)
+            else:
+                inp = NumInput(row, value=0, min_v=p["min"], max_v=p["max"],
+                              dtype=p["type"], unit="", width=4,
+                              on_change=lambda v, k=p["key"]: self._set_arg(k, v), bg=BG_SEC)
             inp.pack(side="right")
             self._param_inputs[p["key"]] = inp
 
@@ -618,11 +631,22 @@ class ControlPanel(tk.Tk):
 
         # stuck detection: sync threshold into the row widget
         stuck_card = self._cards.get("stuck-detection")
-        if stuck_card and stuck_card.threshold_input:
-            stuck_card.threshold_input.set(getattr(self._args, "unstuck_threshold", 60))
+        stuck_task = agent.all_tasks.get("stuck-detection")
+        if stuck_card and stuck_card.threshold_input and stuck_task:
+            stuck_card.threshold_input.set(stuck_task.params.get("unstuck_threshold", 60))
 
-        # sync args-based params (skip interval keys already handled above)
+        # sync task params into their GUI inputs
+        for name, task in agent.all_tasks.items():
+            for key, value in task.params.items():
+                inp = self._param_inputs.get(key)
+                if inp is not None:
+                    inp.set(value)
+
+        # sync args-based params (skip interval keys and task-param keys already handled)
         _handled_keys = set(_FEATURE_INTERVAL_KEY.values())
+        for task in agent.all_tasks.values():
+            _handled_keys.update(task.params.keys())
+
         for key, inp in self._param_inputs.items():
             if key in _handled_keys:
                 continue
@@ -676,12 +700,21 @@ class ControlPanel(tk.Tk):
             task.interval = interval
 
     def _handle_stuck_threshold(self, value):
-        """Update args.unstuck_threshold from the stuck-detection row."""
-        self._set_arg("unstuck_threshold", value)
+        """Update the stuck-detection task's threshold param from the row widget."""
+        self._set_task_param("stuck-detection", "unstuck_threshold", value)
         # Also keep the collapsible panel input in sync
         inp = self._param_inputs.get("unstuck_threshold")
         if inp:
             inp.set(value)
+
+    def _set_task_param(self, task_id, key, value):
+        """Update a task.params[key] value directly on the live ScheduledTask."""
+        if self._agent is None:
+            return
+        task = self._agent.all_tasks.get(task_id)
+        if task:
+            task.params[key] = value
+            logger.debug("GUI: %s.params[%s] = %s", task_id, key, value)
 
     def _set_arg(self, key, value):
         if self._args is not None:
