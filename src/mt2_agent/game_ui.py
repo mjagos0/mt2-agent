@@ -78,6 +78,7 @@ class GameUI:
     # Login
     LOGIN_DETECT: GameRectangle = GameRectangle(_BC, (-73.5, -133), (146, 48))
     LOGIN_CH3: GamePt = GamePt(_BC, (144.5, -304))
+    CHARACTER_SELECT_DETECT: GameRectangle = GameRectangle(_BC, (-118, -85), (147, 60))
 
     # Respawn
     RESPAWN_DETECT: GameRectangle = GameRectangle(NAMED_ANCHORS["top-left"], (52, 59), (195, 40))

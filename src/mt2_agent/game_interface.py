@@ -340,6 +340,27 @@ class GameInterface(ABC):
 
         self.event_screenshot("login: completed")
 
+    def character_select(self):
+        trigger_window = self._debug_capture(self.ui.CHARACTER_SELECT_DETECT, "character-trigger")
+        template = self.asset.get_group(self.SERVER_ASSETS).assets[3]
+
+        if not isinstance(template, AssetImage):
+            logger.warning("Expected AssetImage, got %s", type(template))
+            return
+    
+        if not find_template(trigger_window, template, self.window.getScaleFactor()):
+            logger.debug("Character select window not detected")
+            return
+        else:
+            logger.info("Character select window detected")
+        
+        self.event_screenshot("character-select: window detected, selecting character")
+
+        self.inputs.execute(self.inputs.LOGIN_CONFIRM)
+        time.sleep(5)
+
+        self.event_screenshot("character-select: complete")
+
     def respawn(self):
         trigger_window = self._debug_capture(self.ui.RESPAWN_DETECT, "respawn-trigger")
         template = self.asset.get_group(self.SERVER_ASSETS).assets[2]

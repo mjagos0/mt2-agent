@@ -242,6 +242,7 @@ class MetinAgent:
     def setup_schedule(self):
         """Register all features into the heap. Call before run_loop()."""
         self._schedule_feature("login",           self.game.login,           self.args.login,   self.args.login_interval)
+        self._schedule_feature("character-select",self.game.character_select,self.args.login,   self.args.login_interval)
         self._schedule_feature("respawn",         self.game.respawn,         self.args.respawn,  self.args.respawn_interval)
         self._schedule_feature("auto-cast",       self.game.cast_spells,     self.args.spells,   self.args.spells_interval)
         self._schedule_feature("auto-pickup",     self.game.pickup_items,    self.args.pickup,   self.args.pickup_interval)

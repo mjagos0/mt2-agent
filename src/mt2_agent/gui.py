@@ -450,6 +450,7 @@ class ControlPanel(tk.Tk):
                 self._login_section = CollapsibleSection(container, "Auto-Login Settings")
                 self._login_section.pack(fill="x")
                 self._build_interval_params(self._login_section.body, LOGIN_PARAMS, "login")
+                self._build_character_select_row(self._login_section.body)
 
             elif desc.get("expandable") == "respawn":
                 self._respawn_section = CollapsibleSection(container, "Auto-Respawn Settings")
@@ -524,6 +525,31 @@ class ControlPanel(tk.Tk):
                           bg=BG_SEC)
             inp.pack(side="right")
             self._param_inputs[p["key"]] = inp
+
+    def _build_character_select_row(self, parent):
+        """Add a character-select toggle + interval inside the login collapsible section."""
+        # separator
+        tk.Frame(parent, height=1, bg=BORDER).pack(fill="x", pady=(4, 2))
+
+        row = tk.Frame(parent, bg=BG_SEC)
+        row.pack(fill="x", pady=1)
+
+        tk.Label(row, text="Char select", font=(FONT, FONT_XS), bg=BG_SEC, fg=FG_DIM,
+                 width=12, anchor="w").pack(side="left")
+
+        self._char_select_toggle = Toggle(
+            row, on=False,
+            command=lambda v: self._handle_toggle("character-select", v),
+            bg=BG_SEC,
+        )
+        self._char_select_toggle.pack(side="left", padx=(4, 8))
+
+        inp = NumInput(row, value=0, min_v=1, max_v=60,
+                      dtype=float, unit="sec", width=6,
+                      on_change=lambda v: self._handle_interval("character-select", v),
+                      bg=BG_SEC)
+        inp.pack(side="right")
+        self._param_inputs["character_select_interval"] = inp
 
     def _build_target_params(self, parent):
         for p in TARGET_PARAMS:
@@ -608,11 +634,12 @@ class ControlPanel(tk.Tk):
         # Map feature ids to their interval param keys (for features whose
         # interval was moved into a collapsible section).
         _FEATURE_INTERVAL_KEY = {
-            "login":      "login_interval",
-            "respawn":    "respawn_interval",
-            "auto-cast":  "spells_interval",
-            "captcha":    "captcha_interval",
-            "stuck-detection": "stuck_interval",
+            "login":            "login_interval",
+            "character-select": "character_select_interval",
+            "respawn":          "respawn_interval",
+            "auto-cast":        "spells_interval",
+            "captcha":          "captcha_interval",
+            "stuck-detection":  "stuck_interval",
         }
 
         # sync feature toggles & intervals from the live ScheduledTask objects
@@ -634,6 +661,14 @@ class ControlPanel(tk.Tk):
         stuck_task = agent.all_tasks.get("stuck-detection")
         if stuck_card and stuck_card.threshold_input and stuck_task:
             stuck_card.threshold_input.set(stuck_task.params.get("unstuck_threshold", 60))
+
+        # character-select: sync toggle + interval into the login sub-section
+        cs_task = agent.all_tasks.get("character-select")
+        if cs_task and hasattr(self, "_char_select_toggle"):
+            self._char_select_toggle.set(cs_task.enabled)
+            inp = self._param_inputs.get("character_select_interval")
+            if inp:
+                inp.set(cs_task.interval)
 
         # sync task params into their GUI inputs
         for name, task in agent.all_tasks.items():
@@ -740,10 +775,13 @@ class ControlPanel(tk.Tk):
                 task.enabled = False
             for card in self._cards.values():
                 card.set_enabled(False)
+            if hasattr(self, "_char_select_toggle"):
+                self._char_select_toggle.set(False)
         else:
             # Resume: re-enable tasks that were on by default (read from args)
             _ARG_FLAG_FOR_FEATURE = {
                 "login": "login",
+                "character-select": "character_select",
                 "respawn": "respawn",
                 "auto-cast": "spells",
                 "auto-pickup": "pickup",
@@ -762,5 +800,10 @@ class ControlPanel(tk.Tk):
                 card = self._cards.get(name)
                 if card:
                     card.set_enabled(should_enable)
+            # sync character-select toggle (no card, lives in login section)
+            cs_flag = _ARG_FLAG_FOR_FEATURE.get("character-select")
+            cs_enable = getattr(self._args, cs_flag, False) if cs_flag else False
+            if hasattr(self, "_char_select_toggle"):
+                self._char_select_toggle.set(cs_enable)
 
         # The status label will update on the next poll cycle
