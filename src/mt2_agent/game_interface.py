@@ -84,6 +84,49 @@ class GameInterface(ABC):
             screenshot.save(folder / f"{ts}_{filename}.png")
         return screenshot
 
+    # ------------------------------------------------------------------
+    # Event & periodic screenshots
+    # ------------------------------------------------------------------
+
+    def event_screenshot(self, event: str) -> None:
+        """Capture a full-window screenshot annotated with *event* and save it.
+
+        Only fires when the ``screenshots_events`` flag is True in args.
+        """
+        if not getattr(self.args, "screenshots_events", False):
+            return
+
+        try:
+            screenshot = self.window.capture()
+            annotated = screenshot.annotated(event)
+            folder = Path(self.args.screenshot_path)
+            folder.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            safe_event = event.replace(" ", "_").replace(":", "-")
+            filename = f"{ts}_{safe_event}.png"
+            annotated.save(folder / filename)
+            logger.info("Screenshot saved: %s -> %s", event, filename)
+        except Exception:
+            logger.exception("Failed to save event screenshot for '%s'", event)
+
+    def periodic_screenshot(self) -> None:
+        """Take a periodic screenshot (called by the scheduler)."""
+        try:
+            screenshot = self.window.capture()
+            annotated = screenshot.annotated("periodic")
+            folder = Path(self.args.screenshot_path)
+            folder.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = f"{ts}_periodic.png"
+            annotated.save(folder / filename)
+            logger.info("Screenshot saved: %s", filename)
+        except Exception:
+            logger.exception("Failed to save periodic screenshot")
+
+    # ------------------------------------------------------------------
+    # Game actions
+    # ------------------------------------------------------------------
+
     def cast_spell(self, gameRec: GameRectangle, hotkey: Input):
         if hotkey.keyboard is None or hotkey.keyboard.key is None:
             logger.error("None keyboard or key passed")
@@ -123,6 +166,7 @@ class GameInterface(ABC):
 
     def unstuck(self):
         self.inputs.execute(self.inputs.DROP_METIN_QUEUE)
+        self.event_screenshot("stuck-detection: unstuck procedure started")
         for _ in range(self.args.unstuck_clicks):
             pt = self.window.random_point_from_center(self.args.unstuck_center_radius)
             self.inputs.click(pt)
@@ -201,10 +245,13 @@ class GameInterface(ABC):
             return
 
         logger.info("Captcha: window detected")
+        self.event_screenshot("captcha: window detected")
+
         prompt = self._debug_capture(self.ui.CAPTCHA_PROMPT, "captcha-prompt")
         text = read_text(prompt)
         if (text is None):
             logger.error("Failed to read text from Captcha prompt")
+            self.event_screenshot("captcha: failed to read prompt text")
             return
         else:
             logger.info(f"Captcha: Looking for {text}")
@@ -214,6 +261,7 @@ class GameInterface(ABC):
         result = find_first(challenge, self.asset.get_group(item), self.window.getScaleFactor())
         if not result:
             logger.error("Failed to solve Captcha")
+            self.event_screenshot("captcha: failed to solve")
             return
         else:
             logger.info(f"Captcha: Solution found")
@@ -227,7 +275,8 @@ class GameInterface(ABC):
         logger.info(f"Captcha: Moving {itemPt} to {targetRect.center}")
         self.inputs.click(itemPt, movement=MovementType.Bezier, min_delay=0.2)
         self.inputs.click(targetRect.center, movement=MovementType.Bezier, min_delay=1.0)
-        # self.inputs.click(targetRect.center, movement=MovementType.Bezier, min_delay=0.2)
+
+        self.event_screenshot("captcha: solved")
 
         if self.args.debug:
             matched_asset = result[0]
@@ -259,6 +308,8 @@ class GameInterface(ABC):
         else:
             logger.info("Login window detected")
         
+        self.event_screenshot("login: window detected, attempting login")
+
         logger.info("Trying to login-in")
         ch3_button = self.window.gamept_to_screenpt(self.ui.LOGIN_CH3)
         self.inputs.click(ch3_button)
@@ -268,6 +319,8 @@ class GameInterface(ABC):
         self.inputs.execute(self.inputs.LOGIN_CONFIRM)
         logger.info("Character selected")
         time.sleep(5)
+
+        self.event_screenshot("login: completed")
 
     def respawn(self):
         trigger_window = self._debug_capture(self.ui.RESPAWN_DETECT, "respawn-trigger")
@@ -282,6 +335,8 @@ class GameInterface(ABC):
             logger.debug("Respawn window not detected")
             return
 
+        self.event_screenshot("respawn: death detected, attempting respawn")
+
         logger.info("Trying to respawn")
         x, y = result
         windowCenter = ScreenPt(
@@ -292,6 +347,8 @@ class GameInterface(ABC):
         logger.info("Respawned")
         self.inputs.execute(self.inputs.TOGGLE_HORSE)
         logger.info("Mounting horse")
+
+        self.event_screenshot("respawn: completed")
         
 
     def attack(self):
@@ -299,38 +356,7 @@ class GameInterface(ABC):
         self.inputs.toggle_key(self.inputs.ATTACK_BUTTON)
         
     def biolog(self):
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # shop = self.window.gamept_to_screenpt(self.ui.BIOLOG_SHOP)
-        # self.inputs.click(shop)
-
-        # for item in self.ui.biolog_items:
-        #     for _ in range(3):
-        #         itemRect = self.window.gamerec_to_screenrec(item)
-        #         self.inputs.click(itemRect.center, "right", min_delay=0.03)
-        #         okPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_OK)
-        #         self.inputs.click(okPt, "left", min_delay=0.03)
-
-        # itemRect = self.window.gamerec_to_screenrec(self.ui.biolog_items[0])
-        # self.inputs.click(itemRect.center, "left", min_delay=0.05)
-        # self.inputs.click(itemRect.center, "left", min_delay=0.05)
-        # self.inputs.execute(self.inputs.CLOSE_WINDOW)
-
-        # shopExit = self.window.gamerec_to_screenrec(self.ui.BIOLOG_SHOP_EXIT)
-        # self.inputs.click(shopExit.center, "left")
-        
-        # self.inputs.click(confirmPt, min_delay=0.2)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # self.inputs.click(confirmPt, min_delay=0.2)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # self.inputs.click(confirmPt, min_delay=0.2)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
-        # self.inputs.click(confirmPt, min_delay=0.2)
-        # self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY)
         confirmPt = self.window.gamept_to_screenpt(self.ui.BIOLOG_CONFIRM)
         self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY, min_delay=1)
         self.inputs.click(confirmPt, movement=MovementType.Bezier, min_delay=1)
         self.inputs.execute(self.inputs.OPEN_BIOLOG_KEY, min_delay=1)
-        # self.inputs.execute(self.inputs.CLOSE_WINDOW, min_delay=1)
