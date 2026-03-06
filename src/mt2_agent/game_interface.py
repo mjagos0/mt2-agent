@@ -370,11 +370,9 @@ class GameInterface(ABC):
             return
 
         retries: int = 5
+        died = False
         while (result := find_template(trigger_window, template, self.window.getScaleFactor())):
-            if not result:
-                logger.debug("Respawn window not detected")
-                return
-
+            died = True
             self.event_screenshot("respawn: death detected, attempting respawn")
 
             logger.info("Trying to respawn")
@@ -386,12 +384,12 @@ class GameInterface(ABC):
 
             time.sleep(0.5)
             trigger_window = self._debug_capture(self.ui.RESPAWN_DETECT, "respawn-trigger")
-            
-        logger.info("Respawned")
-        self.inputs.execute(self.inputs.TOGGLE_HORSE)
-        logger.info("Mounting horse")
 
-        self.event_screenshot("respawn: completed")
+        if died:
+            logger.info("Respawned")
+            self.inputs.execute(self.inputs.TOGGLE_HORSE)
+            logger.info("Mounting horse")
+            self.event_screenshot("respawn: completed")
         
 
     def attack(self):
