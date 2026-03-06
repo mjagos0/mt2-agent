@@ -1,10 +1,10 @@
-# ./mt2_agent/util_object_detection.py
 from .window import Screenshot, ScreenPt, ScreenRectangle
 
 from dataclasses import dataclass
 from ultralytics import YOLO
 import enum
 import logging
+import math
 import cv2
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,11 @@ class Detection:
         return self.rect.height
 
 
+def _distance(a: ScreenPt, b: ScreenPt) -> float:
+    """Euclidean distance between two screen points."""
+    return math.hypot(a.x - b.x, a.y - b.y)
+
+
 @dataclass(frozen=True)
 class DetectionResult:
     """Detections pre-indexed by label for O(1) lookups.
@@ -68,6 +73,15 @@ class DetectionResult:
     def __bool__(self) -> bool:
         return len(self.detections) > 0
 
+    @property
+    def image_center(self) -> ScreenPt:
+        """Center of the screenshot in screen coordinates."""
+        h, w = self.screenshot.data.shape[:2]
+        return ScreenPt(
+            x=self.screenshot.origin_x + w // 2,
+            y=self.screenshot.origin_y + h // 2,
+        )
+
     def by_label(self, label: Label) -> list[Detection]:
         return self._by_label.get(label, [])
 
@@ -76,14 +90,22 @@ class DetectionResult:
         dets = self._by_label.get(label)
         return dets[0] if dets else None
 
+    def closest_to_center(self, label: Label) -> Detection | None:
+        """Return the detection of the given label closest to the image center."""
+        dets = self._by_label.get(label)
+        if not dets:
+            return None
+        center = self.image_center
+        return min(dets, key=lambda d: _distance(d.center, center))
+
     def first_by_priority(self, priority_order: list[Label]) -> Detection | None:
-        """Return first detection of the highest-priority label present.
+        """Return the closest-to-center detection of the highest-priority label present.
 
         Args:
             priority_order: labels ordered highest-priority first.
         """
         for label in priority_order:
-            det = self.first(label)
+            det = self.closest_to_center(label)
             if det is not None:
                 return det
         return None
