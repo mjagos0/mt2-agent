@@ -369,20 +369,22 @@ class GameInterface(ABC):
             logger.warning("Expected AssetImage, got %s", type(template))
             return
 
-        result = find_template(trigger_window, template, self.window.getScaleFactor())
-        if not result:
-            logger.debug("Respawn window not detected")
-            return
+        retries: int = 5
+        while (result := find_template(trigger_window, template, self.window.getScaleFactor())):
+            if not result:
+                logger.debug("Respawn window not detected")
+                return
 
-        self.event_screenshot("respawn: death detected, attempting respawn")
+            self.event_screenshot("respawn: death detected, attempting respawn")
 
-        logger.info("Trying to respawn")
-        x, y = result
-        windowCenter = ScreenPt(
-            trigger_window.origin_x + x + 1, trigger_window.origin_y + y + 1
-        )
-
-        self.inputs.click(windowCenter, movement=MovementType.Bezier)
+            logger.info("Trying to respawn")
+            x, y = result
+            windowCenter = ScreenPt(
+                trigger_window.origin_x + x + retries, trigger_window.origin_y + y
+            )
+            time.sleep(0.5)
+            self.inputs.click(windowCenter, movement=MovementType.Bezier)
+            
         logger.info("Respawned")
         self.inputs.execute(self.inputs.TOGGLE_HORSE)
         logger.info("Mounting horse")
