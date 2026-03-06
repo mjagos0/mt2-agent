@@ -27,12 +27,12 @@ class StuckDetector:
             if (self.last_moved_time > 0):
                 f"Stuck-detection: Reset"
             self.last_moved_time = time.monotonic()
+            self.last_coordinates = current_coordinates
         else:
             logger.info(
                 f"Stuck-detection: {self.stuck_duration:.0f}/{self.stagnant_duration_threshold}s"
             )
 
-        self.last_coordinates = current_coordinates
         return self.stuck_duration >= self.stagnant_duration_threshold
 
     @property
