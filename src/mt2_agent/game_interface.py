@@ -382,8 +382,10 @@ class GameInterface(ABC):
             windowCenter = ScreenPt(
                 trigger_window.origin_x + x + retries, trigger_window.origin_y + y
             )
-            time.sleep(0.5)
             self.inputs.click(windowCenter, movement=MovementType.Bezier)
+
+            time.sleep(0.5)
+            trigger_window = self._debug_capture(self.ui.RESPAWN_DETECT, "respawn-trigger")
             
         logger.info("Respawned")
         self.inputs.execute(self.inputs.TOGGLE_HORSE)
