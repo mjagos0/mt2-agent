@@ -24,14 +24,15 @@ class StuckDetector:
         logger.debug(f"Coordinates: {current_coordinates} (moved {dist:.1f})")
 
         if dist > self.move_tolerance:
+            if (self.last_moved_time > 0):
+                f"Stuck-detection: Reset"
             self.last_moved_time = time.monotonic()
+        else:
+            logger.info(
+                f"Stuck-detection: {self.stuck_duration:.0f}/{self.stagnant_duration_threshold}s"
+            )
 
         self.last_coordinates = current_coordinates
-
-        logger.debug(
-            f"Character did not move for {self.stuck_duration:.1f}/{self.stagnant_duration_threshold} seconds"
-        )
-
         return self.stuck_duration >= self.stagnant_duration_threshold
 
     @property
