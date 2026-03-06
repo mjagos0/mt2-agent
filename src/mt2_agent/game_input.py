@@ -13,6 +13,9 @@ import time
 from .window import ScreenPt
 
 
+interception.auto_capture_devices(keyboard=True, mouse=True)
+
+
 class MovementType(Enum):
     Instant = 1
     Linear = 2
