@@ -1,16 +1,18 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
-
 import interception
 from interception import MouseButton
 import pytweening  # type: ignore[import-untyped]
 
+import logging
 import math
 import random
 import time
 
 from .window import ScreenPt
+
+logger = logging.getLogger(__name__)
 
 
 interception.auto_capture_devices(keyboard=True, mouse=True)
@@ -193,6 +195,8 @@ class Input:
 # Main GameInputs controller
 # ---------------------------------------------------------------------------
 
+NUM_CHANNELS = 6
+
 
 @dataclass
 class GameInputs:
@@ -225,6 +229,14 @@ class GameInputs:
     TOGGLE_HORSE: Input = Input(keyboard=KeyboardInput("h", CTRL))
     BRAVERY_CAPE: Input = HOTKEY_1
 
+    # Channel switching (Shift + 1..6)
+    CHANNEL_1: Input = Input(keyboard=KeyboardInput("1", SHIFT))
+    CHANNEL_2: Input = Input(keyboard=KeyboardInput("2", SHIFT))
+    CHANNEL_3: Input = Input(keyboard=KeyboardInput("3", SHIFT))
+    CHANNEL_4: Input = Input(keyboard=KeyboardInput("4", SHIFT))
+    CHANNEL_5: Input = Input(keyboard=KeyboardInput("5", SHIFT))
+    CHANNEL_6: Input = Input(keyboard=KeyboardInput("6", SHIFT))
+
     LOGIN_1: Input = Input(keyboard=KeyboardInput("f1"))
     LOGIN_CONFIRM: Input = Input(keyboard=KeyboardInput("return"))
 
@@ -250,6 +262,18 @@ class GameInputs:
             self.HOTKEY_F2,
             self.HOTKEY_F3,
             self.HOTKEY_F4,
+        ]
+
+    @property
+    def channel_inputs(self) -> list[Input]:
+        """Ordered list of channel switch inputs (index 0 = channel 1, etc.)."""
+        return [
+            self.CHANNEL_1,
+            self.CHANNEL_2,
+            self.CHANNEL_3,
+            self.CHANNEL_4,
+            self.CHANNEL_5,
+            self.CHANNEL_6,
         ]
 
     # -----------------------------------------------------------------------
@@ -389,7 +413,7 @@ class GameInputs:
             hold: bool = True
     ):
         if input.keyboard is not None and input.keyboard.key is not None:
-            if hold: # NOTE: This could be auto-detected with windows API 
+            if hold: # NOTE: This could be auto-detected with windows API
                 interception.key_down(input.keyboard.key)
             else:
                 interception.key_up(input.keyboard.key)

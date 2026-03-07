@@ -97,6 +97,8 @@ def handle_args() -> argparse.Namespace:
     features.add_argument("--no-login", dest="login", action="store_false", help="Disable login detection")
     features.add_argument("--biolog", dest="biolog", action="store_true", help="Enable biolog hand-in")
     features.add_argument("--attack", dest="attack", action="store_true", help="Stand in place and hold spacebar")
+    features.add_argument("--channel-switch", dest="channel_switch", action="store_true",
+        help="Enable periodic channel switching (1→2→…→6→1)")
     features.add_argument("--screenshots", dest="screenshots", action="store_true", help="Enable periodic screenshots")
     features.add_argument("--screenshots-events", dest="screenshots_events", action="store_true",
         help="Enable event-triggered screenshots (login, respawn, stuck, captcha)")
@@ -112,6 +114,8 @@ def handle_args() -> argparse.Namespace:
     features.add_argument("--login-interval", type=float, default=5, help="Login check interval in seconds")
     features.add_argument("--biolog-interval", type=float, default=600, help="Biolog hand-in interval in seconds")
     features.add_argument("--attack-interval", type=float, default=1, help="Attack re-check interval in seconds")
+    features.add_argument("--channel-switch-interval", type=float, default=300,
+        help="Channel switch interval in seconds")
     features.add_argument("--screenshots-interval", type=float, default=60, help="Periodic screenshot interval in seconds")
 
     # Stuck detection
@@ -266,6 +270,7 @@ class MetinAgent:
             },
         )
         self._schedule_feature("captcha",         self.game.captcha,         self.args.captcha,  self.args.captcha_interval)
+        self._schedule_feature("channel-switch",  self.game.channel_switcher.switch,  self.args.channel_switch, self.args.channel_switch_interval)
         self._schedule_feature("biolog",          self.game.biolog,          self.args.biolog,   self.args.biolog_interval, 30)
         self._schedule_feature("attack",          self.game.attack,          self.args.attack,   self.args.attack_interval, 2)
         self._schedule_feature("screenshots",     self.game.periodic_screenshot, self.args.screenshots, self.args.screenshots_interval)

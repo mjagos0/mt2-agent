@@ -1,5 +1,6 @@
 from .window import Window, ScreenPt, Screenshot
 from .game_input import GameInputs, Input, MovementType
+from .channel_switcher import ChannelSwitcher
 from .game_ui import GameUI, GameRectangle
 from .asset_manager import AssetManager, AssetImage
 from .stuck_detection import StuckDetector
@@ -37,6 +38,7 @@ class GameInterface(ABC):
     stuck: StuckDetector
     obj_det: ObjectDetector
     asset: AssetManager
+    channel_switcher: ChannelSwitcher
 
     def __init__(self, args: argparse.Namespace, input_overrides: dict[str, Input]):
         self._get_window()
@@ -51,6 +53,8 @@ class GameInterface(ABC):
             args.obj_model_confidence_cutoff,
         )
         self.asset = AssetManager(args.asset_icon_dir)
+
+        self.channel_switcher = ChannelSwitcher(self.inputs, self.event_screenshot)
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
